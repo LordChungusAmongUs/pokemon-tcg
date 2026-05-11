@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
 import { isSetUnlocked, SET_UNLOCK_LEVELS } from '@/lib/progression';
 import { STARTER_DECKS } from '@/lib/starterDecks';
+import { FORMATS } from '@/lib/formats';
 
 // Excluded sets (Base Set 2, Diamond & Pearl and beyond)
 const EXCLUDED_SETS = new Set(['Base Set 2', 'Diamond & Pearl']);
@@ -38,6 +39,7 @@ export default function DeckBuilderPage() {
   const playerLevel = profile?.level ?? 1;
 
   const [search, setSearch] = useState('');
+  const [format, setFormat] = useState('');
   const [set, setSet] = useState('All');
   const [showLocked, setShowLocked] = useState(false);
   const [detail, setDetail] = useState<CardData | null>(null);
@@ -56,18 +58,22 @@ export default function DeckBuilderPage() {
     [playerLevel],
   );
 
+  const activeFormat = FORMATS.find(f => f.id === format);
+  const formatSetNames = activeFormat ? new Set(activeFormat.sets) : null;
+
   const filtered = useMemo(() => {
     const baseFilter = showLocked ? BROWSE_CARDS : BROWSE_CARDS.filter(c => {
-      if (c.supertype === 'Energy') return true; // energy always visible
+      if (c.supertype === 'Energy') return true;
       if (!c.set) return false;
       return isSetUnlocked(c.set, playerLevel);
     });
     return baseFilter.filter(c => {
-      if (set !== 'All' && c.set !== set) return false;
+      if (formatSetNames && c.set && !formatSetNames.has(c.set) && c.supertype !== 'Energy') return false;
+      if (!formatSetNames && set !== 'All' && c.set !== set) return false;
       if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [search, set, showLocked, playerLevel]);
+  }, [search, set, format, showLocked, playerLevel]);
 
   function countInDeck(cardId: string) {
     return deck.filter(c => c.id === cardId).length;
@@ -157,23 +163,38 @@ export default function DeckBuilderPage() {
             onChange={e => setSearch(e.target.value)}
             className="w-full bg-gray-800 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-yellow-500"
           />
-          <div className="flex gap-2 items-center">
-            <select
-              value={set}
-              onChange={e => setSet(e.target.value)}
-              className="flex-1 bg-gray-800 rounded-lg px-2 py-1 text-sm"
-            >
-              {setOptions.map(s => (
-                typeof s === 'string'
-                  ? <option key={s} value={s}>All Sets</option>
-                  : <option key={s.value} value={s.value} disabled={s.locked}>{s.label}</option>
-              ))}
-            </select>
-            <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
-              <input type="checkbox" checked={showLocked} onChange={e => setShowLocked(e.target.checked)} />
-              Preview locked
-            </label>
-          </div>
+          {/* Format filter */}
+          <select
+            value={format}
+            onChange={e => { setFormat(e.target.value); setSet('All'); }}
+            className="w-full bg-gray-800 rounded-lg px-2 py-1 text-sm"
+          >
+            <option value="">— All Formats —</option>
+            {FORMATS.map(f => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
+
+          {/* Set filter (disabled when a format is active) */}
+          {!format && (
+            <div className="flex gap-2 items-center">
+              <select
+                value={set}
+                onChange={e => setSet(e.target.value)}
+                className="flex-1 bg-gray-800 rounded-lg px-2 py-1 text-sm"
+              >
+                {setOptions.map(s => (
+                  typeof s === 'string'
+                    ? <option key={s} value={s}>All Sets</option>
+                    : <option key={s.value} value={s.value} disabled={s.locked}>{s.label}</option>
+                ))}
+              </select>
+              <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+                <input type="checkbox" checked={showLocked} onChange={e => setShowLocked(e.target.checked)} />
+                Preview locked
+              </label>
+            </div>
+          )}
         </div>
 
         <div className="p-2 grid grid-cols-3 sm:grid-cols-4 gap-2 overflow-y-auto">

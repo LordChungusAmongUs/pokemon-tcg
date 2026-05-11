@@ -1,0 +1,112 @@
+{
+  "base1-1": {
+    "localPath": "/cards/Rare/6 alakazam.jpg",
+    "folder": "Rare",
+    "filename": "6 alakazam.jpg"
+  },
+  "base1-8": {
+    "localPath": "/cards/Rare/5 machamp.jpg",
+    "folder": "Rare",
+    "filename": "5 machamp.jpg"
+  },
+  "base1-9": {
+    "localPath": "/cards/Rare/4 magneton.jpg",
+    "folder": "Rare",
+    "filename": "4 magneton.jpg"
+  },
+  "base1-10": {
+    "localPath": "/cards/Legendary/6 mewtwo.jpg",
+    "folder": "Legendary",
+    "filename": "6 mewtwo.jpg"
+  },
+  "base1-14": {
+    "localPath": "/cards/Rare/4 raichu.jpg",
+    "folder": "Rare",
+    "filename": "4 raichu.jpg"
+  },
+  "base1-16": {
+    "localPath": "/cards/Legendary/4 zapdos.jpg",
+    "folder": "Legendary",
+    "filename": "4 zapdos.jpg"
+  },
+  "base1-19": {
+    "localPath": "/cards/Rare/5 dugtrio.jpg",
+    "folder": "Rare",
+    "filename": "5 dugtrio.jpg"
+  },
+  "base1-20": {
+    "localPath": "/cards/Rare/4 electabuzz.jpg",
+    "folder": "Rare",
+    "filename": "4 electabuzz.jpg"
+  },
+  "base1-4": {
+    "localPath": "/cards/Rare/2 charizard.jpg",
+    "folder": "Rare",
+    "filename": "2 charizard.jpg"
+  },
+  "base1-2": {
+    "localPath": null,
+    "folder": null,
+    "filename": null
+  },
+  "base1-6": {
+    "localPath": null,
+    "folder": null,
+    "filename": null
+  },
+  "base1-15": {
+    "localPath": "/cards/Rare/0 venasaur.jpg",
+    "folder": "Rare",
+    "filename": "0 venasaur.jpg"
+  },
+  "base2-14": {
+    "localPath": "/cards/Rare/0 victreebell.jpg",
+    "folder": "Rare",
+    "filename": "0 victreebell.jpg"
+  },
+  "base1-67": {
+    "localPath": "/cards/Common/VoltorbBaseSet67 (1).jpg",
+    "folder": "Common",
+    "filename": "VoltorbBaseSet67 (1).jpg"
+  },
+  "base1-88": {
+    "localPath": "/cards/Uncommon/645px-ProfessorOakVenusaurDeck26.jpg",
+    "folder": "Uncommon",
+    "filename": "645px-ProfessorOakVenusaurDeck26.jpg"
+  },
+  "base1-96": {
+    "localPath": "/cards/Uncommon/DoubleColorlessEnergyExpansionPack.jpg",
+    "folder": "Uncommon",
+    "filename": "DoubleColorlessEnergyExpansionPack.jpg"
+  },
+  "base1-69": {
+    "localPath": "/cards/Common/270px-WeedleEvolutions5.jpg",
+    "folder": "Common",
+    "filename": "270px-WeedleEvolutions5.jpg"
+  },
+  "base1-45": {
+    "localPath": "/cards/Common/CaterpieEvolutions3.jpg",
+    "folder": "Common",
+    "filename": "CaterpieEvolutions3.jpg"
+  },
+  "base1-58": {
+    "localPath": "/cards/Common/Pikachu_Red_Cheek_Variant.jpg",
+    "folder": "Common",
+    "filename": "Pikachu_Red_Cheek_Variant.jpg"
+  },
+  "base1-72": {
+    "localPath": "/cards/Rare/DevolutionSprayEvolutions76.jpg",
+    "folder": "Rare",
+    "filename": "DevolutionSprayEvolutions76.jpg"
+  },
+  "gym2-126": {
+    "localPath": "/cards/Common/WarpPointEXUnseenForces93.jpg",
+    "folder": "Common",
+    "filename": "WarpPointEXUnseenForces93.jpg"
+  },
+  "base5-17": {
+    "localPath": "/cards/Rare/RainbowEnergyPlatinum121.jpg",
+    "folder": "Rare",
+    "filename": "RainbowEnergyPlatinum121.jpg"
+  }
+}

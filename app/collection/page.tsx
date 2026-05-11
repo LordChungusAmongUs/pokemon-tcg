@@ -5,22 +5,33 @@ import CardImage from '@/components/cards/CardImage';
 import CardDetail from '@/components/cards/CardDetail';
 import type { CardData } from '@/engine/GameState';
 import Link from 'next/link';
+import { FORMATS } from '@/lib/formats';
 
+const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl']);
+const PLAYABLE_CARDS = ALL_CARDS.filter(c => !EXCLUDED.has(c.set));
 const SUPERTYPES = ['All', 'Pokémon', 'Trainer', 'Energy'];
-const SETS = ['All', ...Array.from(new Set(ALL_CARDS.map(c => c.set))).sort()];
+const SETS = ['All', ...Array.from(new Set(PLAYABLE_CARDS.map(c => c.set))).sort()];
 
 export default function CollectionPage() {
   const [search, setSearch] = useState('');
   const [supertype, setSupertype] = useState('All');
   const [set, setSet] = useState('All');
+  const [format, setFormat] = useState('');
   const [detail, setDetail] = useState<CardData | null>(null);
 
-  const filtered = useMemo(() => ALL_CARDS.filter(c => {
+  const activeFormat = FORMATS.find(f => f.id === format);
+  const formatSetNames = activeFormat ? new Set(activeFormat.sets) : null;
+
+  const filtered = useMemo(() => PLAYABLE_CARDS.filter(c => {
     if (supertype !== 'All' && c.supertype !== supertype) return false;
-    if (set !== 'All' && c.set !== set) return false;
+    if (formatSetNames) {
+      if (c.set && !formatSetNames.has(c.set)) return false;
+    } else {
+      if (set !== 'All' && c.set !== set) return false;
+    }
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
-  }), [search, supertype, set]);
+  }), [search, supertype, set, format]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">

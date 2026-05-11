@@ -4,11 +4,17 @@ import Link from 'next/link';
 import { useGameStore } from '@/store/gameStore';
 import type { CardData } from '@/engine/GameState';
 import { BASIC_ENERGY_CARDS, ALL_CARDS } from '@/lib/cardUtils';
+import { STARTER_DECKS } from '@/lib/starterDecks';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { computeLevel } from '@/lib/progression';
 
 const BROWSE_CARDS = [...ALL_CARDS, ...BASIC_ENERGY_CARDS];
+
+function randomAiDeck(): CardData[] {
+  const deck = STARTER_DECKS[Math.floor(Math.random() * STARTER_DECKS.length)];
+  return deck.cardIds.map(id => BROWSE_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
+}
 
 interface LocalDeck { name: string; cardIds: string[]; }
 
@@ -48,12 +54,24 @@ export default function HomePage() {
 
   function handleStart() {
     const d1 = allDecks.find(d => d.name === p1Deck);
-    const d2 = allDecks.find(d => d.name === p2Deck);
-    if (!d1 || !d2) { alert('Select decks for both players first.'); return; }
+    if (!d1) { alert('Select a deck for Player 1 first.'); return; }
     const cards1 = deckToCards(d1);
-    const cards2 = deckToCards(d2);
-    if (cards1.length < 20 || cards2.length < 20) { alert('Each deck needs at least 20 cards to play.'); return; }
-    startGame(p1Name, cards1, mode === 'vs-ai' ? 'CPU' : p2Name, cards2, mode);
+    if (cards1.length < 20) { alert('Your deck needs at least 20 cards to play.'); return; }
+
+    let cards2: CardData[];
+    let p2NameFinal: string;
+    if (mode === 'vs-ai') {
+      cards2 = randomAiDeck();
+      p2NameFinal = 'CPU';
+    } else {
+      const d2 = allDecks.find(d => d.name === p2Deck);
+      if (!d2) { alert('Select a deck for Player 2 first.'); return; }
+      cards2 = deckToCards(d2);
+      if (cards2.length < 20) { alert('Player 2 deck needs at least 20 cards to play.'); return; }
+      p2NameFinal = p2Name;
+    }
+
+    startGame(p1Name, cards1, p2NameFinal, cards2, mode);
     router.push('/game');
   }
 

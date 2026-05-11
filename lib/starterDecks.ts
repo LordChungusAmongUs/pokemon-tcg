@@ -9,13 +9,13 @@ export interface StarterDeck {
 }
 
 // ── Base Set trainers / energy helpers ──────────────────────────────────────
-const E_FIRE      = 'basic-fire';
-const E_WATER     = 'basic-water';
-const E_LIGHTNING = 'basic-lightning';
-const E_GRASS     = 'basic-grass';
-const E_PSYCHIC   = 'basic-psychic';
-const E_FIGHTING  = 'basic-fighting';
-const E_COLORLESS = 'basic-colorless'; // used as DCE stand-in when needed
+const E_FIRE      = 'basic-energy-fire';
+const E_WATER     = 'basic-energy-water';
+const E_LIGHTNING = 'basic-energy-lightning';
+const E_GRASS     = 'basic-energy-grass';
+const E_PSYCHIC   = 'basic-energy-psychic';
+const E_FIGHTING  = 'basic-energy-fighting';
+const E_COLORLESS = 'basic-energy-colorless'; // used as DCE stand-in when needed
 const DCE         = 'base1-96';
 const OAK         = 'base1-88';
 const BILL        = 'base1-91';

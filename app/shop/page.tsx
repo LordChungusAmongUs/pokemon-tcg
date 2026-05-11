@@ -240,44 +240,76 @@ export default function ShopPage() {
           );
         })()}
 
-        {tab === 'decks' && (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-400">
-              Theme decks are pre-built 60-card decks. Each costs {THEME_DECK_COST} credits.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {STARTER_DECKS.map(sd => (
-                <div key={sd.id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-                  <div className="font-bold mb-1">{sd.name}</div>
-                  <div className="text-sm text-gray-400 mb-3">{sd.description}</div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-yellow-400 text-sm font-bold">{THEME_DECK_COST} credits</span>
-                    <span className="text-xs text-gray-500">60 cards</span>
+        {tab === 'decks' && (() => {
+          const starterDeck = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
+          const themeDecks  = STARTER_DECKS.filter(d => d.id !== 'custom-fists-and-fire');
+
+          function BuyDeckButton({ sd }: { sd: typeof STARTER_DECKS[0] }) {
+            return (
+              <button
+                onClick={async () => {
+                  if (!user) { alert('Sign in to buy decks!'); return; }
+                  if (credits < THEME_DECK_COST) { alert('Not enough credits!'); return; }
+                  await addCredits(-THEME_DECK_COST);
+                  addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
+                  alert(`${sd.name} added to your collection!`);
+                }}
+                disabled={credits < THEME_DECK_COST || !user}
+                className="w-full py-1.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-bold rounded-lg"
+              >
+                {!user ? 'Sign in to buy' : credits < THEME_DECK_COST ? 'Not enough credits' : 'Buy Deck'}
+              </button>
+            );
+          }
+
+          return (
+            <div className="space-y-5">
+              {/* ── Starter Deck ─────────────────────────────── */}
+              {starterDeck && (
+                <div>
+                  <h3 className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-2">Starter Deck</h3>
+                  <div className="bg-gray-800 rounded-xl p-4 border border-yellow-600/50">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-bold text-lg">{starterDeck.name}</span>
+                      <span className="text-[10px] bg-yellow-500 text-black font-bold px-1.5 py-0.5 rounded">STARTER</span>
+                    </div>
+                    <div className="text-sm text-gray-400 mb-3">{starterDeck.description}</div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-yellow-400 text-sm font-bold">{THEME_DECK_COST} credits</span>
+                      <span className="text-xs text-gray-500">{starterDeck.cardIds.length} cards</span>
+                    </div>
+                    <BuyDeckButton sd={starterDeck} />
+                    <Link href="/deck-builder" className="mt-2 block text-center py-1 text-xs text-gray-400 hover:text-white">
+                      Use in Builder →
+                    </Link>
                   </div>
-                  <button
-                    onClick={async () => {
-                      if (!user) { alert('Sign in to buy decks!'); return; }
-                      if (credits < THEME_DECK_COST) { alert('Not enough credits!'); return; }
-                      await addCredits(-THEME_DECK_COST);
-                      addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
-                      alert(`${sd.name} added to your collection!`);
-                    }}
-                    disabled={credits < THEME_DECK_COST || !user}
-                    className="w-full py-1.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-bold rounded-lg"
-                  >
-                    {!user ? 'Sign in to buy' : credits < THEME_DECK_COST ? 'Not enough credits' : 'Buy Deck'}
-                  </button>
-                  <Link
-                    href="/deck-builder"
-                    className="mt-2 block text-center py-1 text-xs text-gray-400 hover:text-white"
-                  >
-                    Use starter in Builder →
-                  </Link>
                 </div>
-              ))}
+              )}
+
+              {/* ── Theme Decks ───────────────────────────────── */}
+              <div>
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Theme Decks</h3>
+                <p className="text-xs text-gray-500 mb-3">Each costs {THEME_DECK_COST} credits.</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {themeDecks.map(sd => (
+                    <div key={sd.id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                      <div className="font-bold mb-1">{sd.name}</div>
+                      <div className="text-sm text-gray-400 mb-3">{sd.description}</div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-yellow-400 text-sm font-bold">{THEME_DECK_COST} credits</span>
+                        <span className="text-xs text-gray-500">{sd.cardIds.length} cards</span>
+                      </div>
+                      <BuyDeckButton sd={sd} />
+                      <Link href="/deck-builder" className="mt-2 block text-center py-1 text-xs text-gray-400 hover:text-white">
+                        Use in Builder →
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

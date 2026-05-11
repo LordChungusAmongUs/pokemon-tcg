@@ -358,9 +358,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     if (!user) return;
     const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
     if (wasStarterGiven(storageId)) return;
-    const machampDeck = STARTER_DECKS.find(d => d.id === 'starter-machamp');
-    if (!machampDeck) return;
-    const cardIds = machampDeck.cardIds.filter(id => !id.startsWith('basic-'));
+    const starterDeck = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
+    if (!starterDeck) return;
+    const cardIds = starterDeck.cardIds.filter(id => !id.startsWith('basic-'));
     get().addToCollection(cardIds);
     markStarterGiven(storageId);
   },

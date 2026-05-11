@@ -221,7 +221,7 @@ export default function GamePage() {
     p1.bench.some(b => b !== null);
 
   return (
-    <div className="h-dvh overflow-hidden bg-green-950 text-white flex flex-col select-none">
+    <div className="h-dvh bg-green-950 text-white flex flex-col select-none">
 
       {/* Card preview overlay */}
       {previewCard && (
@@ -270,106 +270,108 @@ export default function GamePage() {
 
       {detailCard && <CardDetail card={detailCard} onClose={() => setDetailCard(null)} />}
 
-      {/* ── P2 header ────────────────────────────────────────── */}
-      <div className="flex-none flex items-center justify-between text-xs text-gray-300 px-2 pt-1">
-        <span className="font-bold text-yellow-300 truncate max-w-24">{p2.name}</span>
-        <div className="flex gap-2">
-          <span>✋{p2.hand.length}</span>
-          <span>🎴{p2.deck.length}</span>
-          <span>🏆{p2.prizes.length}</span>
-          {aiRunning && <span className="text-yellow-400 animate-pulse">thinking…</span>}
+      {/* ── Scrollable board ─────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+
+        {/* P2 header */}
+        <div className="flex items-center justify-between text-xs text-gray-300 px-2 pt-1 pb-0.5 bg-green-900/50">
+          <span className="font-bold text-yellow-300 truncate max-w-24">{p2.name}</span>
+          <div className="flex gap-2">
+            <span>✋{p2.hand.length}</span>
+            <span>🎴{p2.deck.length}</span>
+            <span>🏆{p2.prizes.length}</span>
+            {aiRunning && <span className="text-yellow-400 animate-pulse">thinking…</span>}
+          </div>
         </div>
-      </div>
 
-      {/* ── P2 bench ─────────────────────────────────────────── */}
-      <div className="flex-none flex gap-1 justify-center px-2 pb-0.5">
-        {p2.bench.map((poke, i) =>
-          poke
-            ? <InPlayCard key={poke.uid} pokemon={poke} small onClick={() => setPreviewCard(poke.card)} />
-            : <EmptySlot key={i} small />
-        )}
-      </div>
+        {/* P2 bench */}
+        <div className="flex gap-1 justify-center px-2 pb-1 bg-green-900/50">
+          {p2.bench.map((poke, i) =>
+            poke
+              ? <InPlayCard key={poke.uid} pokemon={poke} small onClick={() => setPreviewCard(poke.card)} />
+              : <EmptySlot key={i} small />
+          )}
+        </div>
 
-      {/* ── P2 active ────────────────────────────────────────── */}
-      <div className="flex-none flex justify-center pb-1">
-        {p2.active
-          ? <InPlayCard pokemon={p2.active} isActive small onClick={() => setPreviewCard(p2.active!.card)} />
-          : <EmptySlot label="Active" small />
-        }
-      </div>
+        {/* P2 active */}
+        <div className="flex justify-center py-1 bg-green-900/30">
+          {p2.active
+            ? <InPlayCard pokemon={p2.active} isActive small onClick={() => setPreviewCard(p2.active!.card)} />
+            : <EmptySlot label="Active" small />
+          }
+        </div>
 
-      {/* ── Log + turn label ──────────────────────────────────── */}
-      <div className="flex-none px-2 py-0.5 border-t border-b border-green-800/60">
-        <div className="flex items-center gap-2">
+        {/* Log + turn label */}
+        <div className="flex items-center gap-2 px-2 py-1 border-t border-b border-green-800/60 bg-green-950">
           <div className="flex-none text-[10px] text-gray-400 whitespace-nowrap">
             {isP1Turn ? `${p1.name}'s turn` : `${p2.name}'s turn`}
           </div>
-          <GameLog entries={game.log.slice(-6)} className="flex-1" />
+          <GameLog entries={game.log.slice(-5)} className="flex-1" />
         </div>
-      </div>
 
-      {/* ── P1 active ────────────────────────────────────────── */}
-      <div className="flex-none flex flex-col items-center pt-1 pb-0.5 gap-0.5">
-        {p1.active ? (
-          <>
-            <InPlayCard
-              pokemon={p1.active}
-              isActive
-              small
-              onClick={() => {
-                if (isEnergySelected && selectedHandUid) { attachEnergyAction(selectedHandUid, p1.active!.uid); return; }
-                if (isEvoSelected && selectedHandUid) { evolveAction(selectedHandUid, p1.active!.uid); return; }
-                setPreviewCard(p1.active!.card);
-              }}
-            />
-            {/* Attack buttons */}
-            {isP1Turn && !p1.hasAttackedThisTurn && (
-              <div className="flex gap-1 flex-wrap justify-center">
-                {p1.active.card.attacks.map((atk, i) => {
-                  const can = canPayCost(atk.cost, p1.active!.attachedEnergy);
-                  return (
-                    <button key={i} disabled={!can} onClick={() => attackAction(i)}
-                      className={`text-[10px] px-1.5 py-0.5 rounded leading-tight ${can ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}>
-                      {atk.name} {atk.damageStr || (atk.damage ? `${atk.damage}` : '')}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        ) : (
-          <EmptySlot label="Active" small />
-        )}
-      </div>
-
-      {/* ── P1 bench ─────────────────────────────────────────── */}
-      <div className="flex-none flex gap-1 justify-center px-2 pt-1 pb-0.5">
-        {p1.bench.map((poke, i) =>
-          poke ? (
-            <div key={poke.uid} className="flex flex-col items-center gap-0.5">
+        {/* P1 active */}
+        <div className="flex flex-col items-center py-1 gap-0.5 bg-green-900/30">
+          {p1.active ? (
+            <>
               <InPlayCard
-                pokemon={poke}
+                pokemon={p1.active}
+                isActive
                 small
-                selected={isEnergySelected || isEvoSelected}
-                onClick={() => handleBenchClick('player1', i)}
+                onClick={() => {
+                  if (isEnergySelected && selectedHandUid) { attachEnergyAction(selectedHandUid, p1.active!.uid); return; }
+                  if (isEvoSelected && selectedHandUid) { evolveAction(selectedHandUid, p1.active!.uid); return; }
+                  setPreviewCard(p1.active!.card);
+                }}
               />
-              {isP1Turn && canRetreat && (
-                <button onClick={() => retreatAction(i)}
-                  className="text-[9px] px-1 py-0.5 bg-blue-700 hover:bg-blue-600 rounded leading-none">
-                  Swap
-                </button>
+              {isP1Turn && !p1.hasAttackedThisTurn && (
+                <div className="flex gap-1 flex-wrap justify-center">
+                  {p1.active.card.attacks.map((atk, i) => {
+                    const can = canPayCost(atk.cost, p1.active!.attachedEnergy);
+                    return (
+                      <button key={i} disabled={!can} onClick={() => attackAction(i)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded leading-tight ${can ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}>
+                        {atk.name} {atk.damageStr || (atk.damage ? `${atk.damage}` : '')}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
-            </div>
+            </>
           ) : (
-            <EmptySlot key={i} small
-              highlight={isBasicSelected && isP1Turn}
-              onClick={() => isBasicSelected && selectedHandUid && playBasic(selectedHandUid, i)} />
-          )
-        )}
-      </div>
+            <EmptySlot label="Active" small />
+          )}
+        </div>
 
-      {/* ── Controls ─────────────────────────────────────────── */}
-      <div className="flex-none flex items-center justify-between px-3 py-1 bg-green-900/40">
+        {/* P1 bench */}
+        <div className="flex gap-1 justify-center px-2 py-1 bg-green-900/50">
+          {p1.bench.map((poke, i) =>
+            poke ? (
+              <div key={poke.uid} className="flex flex-col items-center gap-0.5">
+                <InPlayCard
+                  pokemon={poke}
+                  small
+                  selected={isEnergySelected || isEvoSelected}
+                  onClick={() => handleBenchClick('player1', i)}
+                />
+                {isP1Turn && canRetreat && (
+                  <button onClick={() => retreatAction(i)}
+                    className="text-[9px] px-1 py-0.5 bg-blue-700 hover:bg-blue-600 rounded leading-none">
+                    Swap
+                  </button>
+                )}
+              </div>
+            ) : (
+              <EmptySlot key={i} small
+                highlight={isBasicSelected && isP1Turn}
+                onClick={() => isBasicSelected && selectedHandUid && playBasic(selectedHandUid, i)} />
+            )
+          )}
+        </div>
+
+      </div>{/* end scrollable board */}
+
+      {/* ── Controls — always visible ─────────────────────────── */}
+      <div className="flex-none flex items-center justify-between px-3 py-1.5 bg-green-900/60 border-t border-green-800/60">
         <div className="flex gap-2 items-center text-xs text-gray-300">
           <span className="font-bold text-yellow-300 truncate max-w-20">{p1.name}</span>
           <CardBack small count={p1.prizes.length} className="w-6 h-8 text-xs" />
@@ -379,13 +381,13 @@ export default function GamePage() {
           <div className="flex gap-2">
             {game.phase === 'draw' && (
               <button onClick={drawPhase}
-                className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm font-medium">
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm font-medium">
                 Draw
               </button>
             )}
             {(game.phase === 'main' || game.phase === 'attack') && (
               <button onClick={endTurnAction}
-                className="px-3 py-1 bg-orange-600 hover:bg-orange-500 rounded text-sm font-medium">
+                className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 rounded text-sm font-medium">
                 End Turn
               </button>
             )}
@@ -394,8 +396,8 @@ export default function GamePage() {
         <Link href="/" className="text-xs text-gray-500 hover:text-white">Quit</Link>
       </div>
 
-      {/* ── P1 Hand ───────────────────────────────────────────── */}
-      <div className="flex-1 min-h-[88px] bg-black/40 px-2 pt-1 pb-2 overflow-y-hidden overflow-x-auto">
+      {/* ── Hand — always visible ─────────────────────────────── */}
+      <div className="flex-none bg-black/50 px-2 pt-1 pb-safe-2" style={{ minHeight: 100 }}>
         {selectedCard && (
           <p className="text-[10px] text-yellow-300 mb-0.5 leading-tight">
             {selectedCard.card.name}: {
@@ -405,7 +407,7 @@ export default function GamePage() {
             }
           </p>
         )}
-        <div className="flex gap-1 h-full items-end pb-1">
+        <div className="flex gap-1 overflow-x-auto pb-1">
           {activePlayer.hand.map(c => (
             <div key={c.uid} className="flex-shrink-0 flex flex-col items-center gap-0.5">
               <CardImage
@@ -427,10 +429,11 @@ export default function GamePage() {
             </div>
           ))}
           {activePlayer.hand.length === 0 && (
-            <span className="text-gray-500 text-sm self-center">Empty hand</span>
+            <span className="text-gray-500 text-sm py-2">Empty hand</span>
           )}
         </div>
       </div>
+
     </div>
   );
 }

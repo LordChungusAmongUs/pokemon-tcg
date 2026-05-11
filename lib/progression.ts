@@ -43,8 +43,8 @@ export function computeLevel(totalXp: number): { level: number; xpIntoLevel: num
 // Ordered set progression — each set unlocks when you own ≥60% of its prerequisite.
 // prerequisite: null means always unlocked (Base Set).
 export const SET_PROGRESSION: Array<{ name: string; prerequisite: string | null }> = [
-  { name: 'Base Set',                 prerequisite: null },
-  { name: 'Jungle',                  prerequisite: 'Base Set' },
+  { name: 'Base',                     prerequisite: null },
+  { name: 'Jungle',                  prerequisite: 'Base' },
   { name: 'Fossil',                  prerequisite: 'Jungle' },
   { name: 'Team Rocket',             prerequisite: 'Fossil' },
   { name: 'Gym Heroes',              prerequisite: 'Team Rocket' },

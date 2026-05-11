@@ -61,10 +61,10 @@ export default function ShopPage() {
       {/* Pack result overlay */}
       {packResult.length > 0 && (
         <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] flex flex-col">
+          <div className="bg-gray-900 rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
             <h2 className="text-xl font-bold text-yellow-400 mb-1">{packLabel}</h2>
             <p className="text-sm text-gray-400 mb-4">{packResult.length} cards received</p>
-            <div className="overflow-y-auto flex-1">
+            <div className="overflow-y-auto flex-1 min-h-0">
               <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
                 {packResult.map((card, i) => (
                   <CardImage key={i} card={card} small />

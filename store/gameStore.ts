@@ -86,10 +86,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     selectedHandUid: null,
   })),
 
-  attackAction: (attackIndex) => set(s => ({
-    game: s.game ? attack(s.game, attackIndex) : null,
-    selectedHandUid: null,
-  })),
+  attackAction: (attackIndex) => set(s => {
+    if (!s.game) return { game: null, selectedHandUid: null };
+    const afterAttack = attack(s.game, attackIndex);
+    const final = afterAttack.phase !== 'gameover' ? endTurn(afterAttack) : afterAttack;
+    return { game: final, selectedHandUid: null };
+  }),
 
   endTurnAction: () => set(s => ({
     game: s.game ? endTurn(s.game) : null,

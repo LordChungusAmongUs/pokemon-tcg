@@ -64,14 +64,30 @@ export function cardImageSrc(card: CardData): string {
   return card.apiImageUrl || '/card-back.png';
 }
 
-// Precomputed map from energy type → image URL using real card images
+function energyTypeFromName(name: string): EnergyType | null {
+  const n = name.toLowerCase();
+  if (n.includes('fire')) return 'Fire';
+  if (n.includes('water')) return 'Water';
+  if (n.includes('grass')) return 'Grass';
+  if (n.includes('lightning')) return 'Lightning';
+  if (n.includes('psychic')) return 'Psychic';
+  if (n.includes('fighting')) return 'Fighting';
+  if (n.includes('darkness') || n.includes('dark')) return 'Darkness';
+  if (n.includes('metal') || n.includes('steel')) return 'Metal';
+  if (n.includes('dragon')) return 'Dragon';
+  if (n.includes('fairy')) return 'Fairy';
+  return null;
+}
+
+// Map from energy type → card image URL (uses apiImageUrl if localImagePath absent)
 export const ENERGY_IMAGE_MAP: Partial<Record<EnergyType, string>> = (() => {
   const map: Partial<Record<EnergyType, string>> = {};
   for (const card of ALL_CARDS) {
-    if (card.supertype === 'Energy' && card.rarity === '' && card.localImagePath && card.types.length > 0) {
-      const type = card.types[0];
-      if (!map[type]) map[type] = cardImageSrc(card);
-    }
+    if (card.supertype !== 'Energy' || card.subtype !== 'Basic') continue;
+    const type = (card.types[0] as EnergyType) ?? energyTypeFromName(card.name);
+    if (!type || map[type]) continue;
+    const src = cardImageSrc(card);
+    if (src !== '/card-back.png') map[type] = src;
   }
   return map;
 })();

@@ -71,6 +71,7 @@ export interface InPlayPokemon {
   statusCondition: StatusCondition | null;
   turnPlayed: number;    // turn number it was placed; can't evolve same turn
   isFirstTurn: boolean;  // true if it was active at start of game (can't retreat t1)
+  evolvedFrom: CardData[]; // previous cards in evolution chain (oldest first)
 }
 
 export type GamePhase =

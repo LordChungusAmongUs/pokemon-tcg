@@ -1,0 +1,249 @@
+[
+  {
+    "file": "270px-WeedleEvolutions5.jpg",
+    "folder": "Common",
+    "localPath": "/cards/Common/270px-WeedleEvolutions5.jpg",
+    "parsed": {
+      "cardName": "WeedleEvolutions5",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "270px-WeedleEvolutions5"
+    },
+    "bestGuess": {
+      "id": "base1-69",
+      "name": "Weedle",
+      "set": "Base",
+      "score": 50
+    }
+  },
+  {
+    "file": "CaterpieEvolutions3.jpg",
+    "folder": "Common",
+    "localPath": "/cards/Common/CaterpieEvolutions3.jpg",
+    "parsed": {
+      "cardName": "CaterpieEvolutions3",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "CaterpieEvolutions3"
+    },
+    "bestGuess": {
+      "id": "base1-45",
+      "name": "Caterpie",
+      "set": "Base",
+      "score": 50
+    }
+  },
+  {
+    "file": "Pikachu_Red_Cheek_Variant.jpg",
+    "folder": "Common",
+    "localPath": "/cards/Common/Pikachu_Red_Cheek_Variant.jpg",
+    "parsed": {
+      "cardName": "Pikachu_Red_Cheek_Variant",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "Pikachu_Red_Cheek_Variant"
+    },
+    "bestGuess": {
+      "id": "base1-58",
+      "name": "Pikachu",
+      "set": "Base",
+      "score": 50
+    }
+  },
+  {
+    "file": "VoltorbBaseSet67 (1).jpg",
+    "folder": "Common",
+    "localPath": "/cards/Common/VoltorbBaseSet67 (1).jpg",
+    "parsed": {
+      "cardName": "VoltorbBaseSet67 (1)",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "VoltorbBaseSet67 (1)"
+    },
+    "bestGuess": {
+      "id": "base1-67",
+      "name": "Voltorb",
+      "set": "Base",
+      "score": 50
+    }
+  },
+  {
+    "file": "WarpPointEXUnseenForces93.jpg",
+    "folder": "Common",
+    "localPath": "/cards/Common/WarpPointEXUnseenForces93.jpg",
+    "parsed": {
+      "cardName": "WarpPointEXUnseenForces93",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "WarpPointEXUnseenForces93"
+    },
+    "bestGuess": {
+      "id": "gym2-126",
+      "name": "Warp Point",
+      "set": "Gym Challenge",
+      "score": 50
+    }
+  },
+  {
+    "file": "645px-ProfessorOakVenusaurDeck26.jpg",
+    "folder": "Uncommon",
+    "localPath": "/cards/Uncommon/645px-ProfessorOakVenusaurDeck26.jpg",
+    "parsed": {
+      "cardName": "ProfessorOakVenusaurDeck26",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "645px-ProfessorOakVenusaurDeck26"
+    },
+    "bestGuess": {
+      "id": "base1-88",
+      "name": "Professor Oak",
+      "set": "Base",
+      "score": 50
+    }
+  },
+  {
+    "file": "DoubleColorlessEnergyExpansionPack.jpg",
+    "folder": "Uncommon",
+    "localPath": "/cards/Uncommon/DoubleColorlessEnergyExpansionPack.jpg",
+    "parsed": {
+      "cardName": "DoubleColorlessEnergyExpansionPack",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "DoubleColorlessEnergyExpansionPack"
+    },
+    "bestGuess": {
+      "id": "base1-96",
+      "name": "Double Colorless Energy",
+      "set": "Base",
+      "score": 50
+    }
+  },
+  {
+    "file": "0 scyther rockets.jpg",
+    "folder": "Rare",
+    "localPath": "/cards/Rare/0 scyther rockets.jpg",
+    "parsed": {
+      "cardName": "scyther rockets",
+      "cardNumber": 0,
+      "setId": null,
+      "raw": "0 scyther rockets"
+    },
+    "bestGuess": {
+      "id": "base2-10",
+      "name": "Scyther",
+      "set": "Jungle",
+      "score": 50
+    }
+  },
+  {
+    "file": "0 venasaur.jpg",
+    "folder": "Rare",
+    "localPath": "/cards/Rare/0 venasaur.jpg",
+    "parsed": {
+      "cardName": "venasaur",
+      "cardNumber": 0,
+      "setId": null,
+      "raw": "0 venasaur"
+    },
+    "bestGuess": null
+  },
+  {
+    "file": "0 vensaur promo.jpg",
+    "folder": "Rare",
+    "localPath": "/cards/Rare/0 vensaur promo.jpg",
+    "parsed": {
+      "cardName": "vensaur",
+      "cardNumber": 0,
+      "setId": null,
+      "raw": "0 vensaur promo"
+    },
+    "bestGuess": null
+  },
+  {
+    "file": "0 victreebell.jpg",
+    "folder": "Rare",
+    "localPath": "/cards/Rare/0 victreebell.jpg",
+    "parsed": {
+      "cardName": "victreebell",
+      "cardNumber": 0,
+      "setId": null,
+      "raw": "0 victreebell"
+    },
+    "bestGuess": {
+      "id": "base2-14",
+      "name": "Victreebel",
+      "set": "Jungle",
+      "score": 50
+    }
+  },
+  {
+    "file": "87054_in_1000x1000.jpg",
+    "folder": "Rare",
+    "localPath": "/cards/Rare/87054_in_1000x1000.jpg",
+    "parsed": {
+      "cardName": "87054_in_1000x1000",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "87054_in_1000x1000"
+    },
+    "bestGuess": null
+  },
+  {
+    "file": "DevolutionSprayEvolutions76.jpg",
+    "folder": "Rare",
+    "localPath": "/cards/Rare/DevolutionSprayEvolutions76.jpg",
+    "parsed": {
+      "cardName": "DevolutionSprayEvolutions76",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "DevolutionSprayEvolutions76"
+    },
+    "bestGuess": {
+      "id": "base1-72",
+      "name": "Devolution Spray",
+      "set": "Base",
+      "score": 50
+    }
+  },
+  {
+    "file": "EX-pansion.png",
+    "folder": "Rare",
+    "localPath": "/cards/Rare/EX-pansion.png",
+    "parsed": {
+      "cardName": "EX-pansion",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "EX-pansion"
+    },
+    "bestGuess": null
+  },
+  {
+    "file": "RainbowEnergyPlatinum121.jpg",
+    "folder": "Rare",
+    "localPath": "/cards/Rare/RainbowEnergyPlatinum121.jpg",
+    "parsed": {
+      "cardName": "RainbowEnergyPlatinum121",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "RainbowEnergyPlatinum121"
+    },
+    "bestGuess": {
+      "id": "base5-17",
+      "name": "Rainbow Energy",
+      "set": "Team Rocket",
+      "score": 50
+    }
+  },
+  {
+    "file": "s-l1600.webp",
+    "folder": "Rare",
+    "localPath": "/cards/Rare/s-l1600.webp",
+    "parsed": {
+      "cardName": "s-l1600",
+      "setId": null,
+      "cardNumber": null,
+      "raw": "s-l1600"
+    },
+    "bestGuess": null
+  }
+]

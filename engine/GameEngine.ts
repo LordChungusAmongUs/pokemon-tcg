@@ -46,7 +46,24 @@ export function inPlayPokemon(card: CardData, turn: number): InPlayPokemon {
     statusCondition: null,
     turnPlayed: turn,
     isFirstTurn: false,
+    evolvedFrom: [],
   };
+}
+
+function parseEnergyType(card: CardData): EnergyType {
+  if (card.types.length > 0) return card.types[0] as EnergyType;
+  const n = card.name.toLowerCase();
+  if (n.includes('fire')) return 'Fire';
+  if (n.includes('water')) return 'Water';
+  if (n.includes('grass')) return 'Grass';
+  if (n.includes('lightning')) return 'Lightning';
+  if (n.includes('psychic')) return 'Psychic';
+  if (n.includes('fighting')) return 'Fighting';
+  if (n.includes('darkness') || n.includes('dark')) return 'Darkness';
+  if (n.includes('metal') || n.includes('steel')) return 'Metal';
+  if (n.includes('dragon')) return 'Dragon';
+  if (n.includes('fairy')) return 'Fairy';
+  return 'Colorless';
 }
 
 function fakeEnergyCard(type: EnergyType, cardId: string): CardInstance {
@@ -272,7 +289,7 @@ export function attachEnergy(
   const energyCard = player.hand.find(c => c.uid === energyHandUid);
   if (!energyCard || energyCard.card.supertype !== 'Energy') return state;
 
-  const energyType: EnergyType = (energyCard.card.types[0] as EnergyType) || 'Colorless';
+  const energyType: EnergyType = parseEnergyType(energyCard.card);
 
   // Double Colorless Energy (base1-96) provides 2 Colorless energy instances
   const isDCE = energyCard.card.id === 'base1-96' ||
@@ -360,6 +377,7 @@ function resolveKO(
 
   const discarded: CardInstance[] = [
     makeCardInstance(player.active.card),
+    ...player.active.evolvedFrom.map(c => makeCardInstance(c)),
     ...player.active.attachedEnergy.map(e => fakeEnergyCard(e.type, e.cardId)),
   ];
 
@@ -709,6 +727,7 @@ export function evolve(state: GameState, handUid: string, targetUid: string): Ga
       damageTaken: Math.max(0, damageTaken),
       statusCondition: null,
       turnPlayed: state.turn,
+      evolvedFrom: [...pokemon.evolvedFrom, pokemon.card],
     };
   };
 

@@ -36,14 +36,25 @@ export default function ShopPage() {
       return;
     }
 
-    const setCards = ALL_CARDS
-      .filter(c => c.set === setName)
+    const allSetCards = ALL_CARDS.filter(c => c.set === setName);
+
+    // Basic energy cards (rarity='') are a dedicated pack slot, not commons
+    const basicEnergyPool = allSetCards.filter(c => c.supertype === 'Energy' && !c.rarity);
+    const setCards = allSetCards
+      .filter(c => !basicEnergyPool.some(e => e.id === c.id))
       .map(c => ({ id: c.id, rarity: c.rarity || 'Common' }));
 
     if (setCards.length === 0) { alert('No cards found for this set.'); return; }
 
+    const pickEnergy = () => basicEnergyPool[Math.floor(Math.random() * basicEnergyPool.length)].id;
+
     const allIds: string[] = [];
-    for (let i = 0; i < count; i++) allIds.push(...pickPackCards(setCards));
+    for (let i = 0; i < count; i++) {
+      allIds.push(...pickPackCards(setCards));
+      if (basicEnergyPool.length > 0) {
+        allIds.push(pickEnergy(), pickEnergy());
+      }
+    }
 
     const pickedCards = allIds
       .map(id => ALL_CARDS.find(c => c.id === id))

@@ -7,7 +7,7 @@ import type { CardData } from '@/engine/GameState';
 import type { Deck } from '@/types/database';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
-import { isSetUnlocked, SET_UNLOCK_LEVELS } from '@/lib/progression';
+import { isSetUnlocked } from '@/lib/cardUtils';
 import { STARTER_DECKS } from '@/lib/starterDecks';
 import { FORMATS } from '@/lib/formats';
 
@@ -53,8 +53,8 @@ export default function DeckBuilderPage() {
   }, [user]);
 
   const unlockedSets = useMemo(
-    () => ALL_SETS.filter(s => isSetUnlocked(s, playerLevel)),
-    [playerLevel],
+    () => ALL_SETS.filter(s => isSetUnlocked(s, collection)),
+    [collection],
   );
 
   const activeFormat = FORMATS.find(f => f.id === format);
@@ -72,14 +72,14 @@ export default function DeckBuilderPage() {
       // Must own at least one copy (basic energy always passes)
       if (!isBasicEnergy && (collection[c.id] ?? 0) === 0) return false;
       // Locked sets still blocked
-      if (!isBasicEnergy && c.set && !isSetUnlocked(c.set, playerLevel)) return false;
+      if (!isBasicEnergy && c.set && !isSetUnlocked(c.set, collection)) return false;
       // Format/set/search filters
       if (formatSetNames && c.set && !formatSetNames.has(c.set) && !isBasicEnergy) return false;
       if (!formatSetNames && set !== 'All' && c.set !== set) return false;
       if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [search, set, format, playerLevel, collection]);
+  }, [search, set, format, collection]);
 
   function countInDeck(cardId: string) {
     return deck.filter(c => c.id === cardId).length;
@@ -90,7 +90,7 @@ export default function DeckBuilderPage() {
     const isBasicEnergy = card.supertype === 'Energy' && card.subtype === 'Basic';
     if (!isBasicEnergy && countInDeck(card.id) >= 4) return;
     if (!isBasicEnergy && countInDeck(card.id) >= owned(card)) return; // can't add more than you own
-    if (card.set && !isSetUnlocked(card.set, playerLevel) && !isBasicEnergy) return;
+    if (card.set && !isSetUnlocked(card.set, collection) && !isBasicEnergy) return;
     setDeck([...deck, card]);
   }
 
@@ -142,8 +142,8 @@ export default function DeckBuilderPage() {
   })).filter(x => x.card);
 
   const setOptions = ['All', ...ALL_SETS.map(s => {
-    const locked = !isSetUnlocked(s, playerLevel);
-    return { value: s, label: locked ? `${s} (Lv${SET_UNLOCK_LEVELS[s]})` : s, locked };
+    const locked = !isSetUnlocked(s, collection);
+    return { value: s, label: locked ? `${s} 🔒` : s, locked };
   })];
 
   return (

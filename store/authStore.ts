@@ -3,7 +3,8 @@ import { create } from 'zustand';
 import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import type { Profile, Deck } from '@/types/database';
-import { computeLevel, CREDIT_REWARDS } from '@/lib/progression';
+import { computeLevel, CREDIT_REWARDS, STARTING_CREDITS } from '@/lib/progression';
+import { STARTER_DECKS } from '@/lib/starterDecks';
 
 const LOCAL_GUEST_KEY = 'pokemon-tcg-guest';
 const LOCAL_GUEST_ID  = 'local-guest';
@@ -34,6 +35,14 @@ function saveEncounteredToStorage(userId: string, e: Set<string>) {
   try { localStorage.setItem(encounteredKey(userId), JSON.stringify([...e])); } catch {}
 }
 
+function starterGivenKey(userId: string) { return `pokemon-tcg-starter-${userId}`; }
+function wasStarterGiven(userId: string): boolean {
+  try { return localStorage.getItem(starterGivenKey(userId)) === 'true'; } catch { return false; }
+}
+function markStarterGiven(userId: string) {
+  try { localStorage.setItem(starterGivenKey(userId), 'true'); } catch {}
+}
+
 function isSupabaseConfigured(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
   return url.length > 0 && !url.includes('placeholder');
@@ -52,7 +61,7 @@ function makeGuestProfile(): Profile {
     elo: 1000,
     xp: 0,
     level: 1,
-    credits: 1000,
+    credits: STARTING_CREDITS,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -94,6 +103,7 @@ interface AuthStore {
   awardGameResult: (won: boolean) => Promise<void>;
   addToCollection: (cardIds: string[]) => void;
   addEncountered: (cardIds: string[]) => void;
+  ensureStarterDeck: () => void;
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
@@ -111,11 +121,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     if (savedGuest) {
       // Patch corrupted profiles that somehow got 0 credits with no XP spent
       const isEmpty = (savedGuest.credits ?? 0) === 0 && (savedGuest.xp ?? 0) === 0 && (savedGuest.wins ?? 0) === 0;
-      const profile = isEmpty ? { ...savedGuest, credits: 1000 } : savedGuest;
+      const profile = isEmpty ? { ...savedGuest, credits: STARTING_CREDITS } : savedGuest;
       if (isEmpty) saveLocalGuest(profile);
       const collection = loadCollectionFromStorage(LOCAL_GUEST_ID);
       const encountered = loadEncounteredFromStorage(LOCAL_GUEST_ID);
       set({ user: fakeUser(), profile, isLocalGuest: true, loading: false, collection, encountered });
+      get().ensureStarterDeck();
       return;
     }
 
@@ -148,6 +159,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
             collection: loadCollectionFromStorage(u.id),
             encountered: loadEncounteredFromStorage(u.id),
           });
+          get().ensureStarterDeck();
         } else {
           set({ profile: null, decks: [], collection: {}, encountered: new Set() });
         }
@@ -181,7 +193,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           id: data.user.id,
           display_name: `Guest${num}`,
           is_guest: true,
-          wins: 0, losses: 0, elo: 1000, xp: 0, level: 1, credits: 1000,
+          wins: 0, losses: 0, elo: 1000, xp: 0, level: 1, credits: STARTING_CREDITS,
         });
         await get().refreshProfile();
         // If credits still 0 (e.g. schema migration not run), force-patch
@@ -207,6 +219,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const collection = loadCollectionFromStorage(LOCAL_GUEST_ID);
     const encountered = loadEncounteredFromStorage(LOCAL_GUEST_ID);
     set({ user: fakeUser(), profile, isLocalGuest: true, loading: false, collection, encountered });
+    get().ensureStarterDeck();
   },
 
   signOut: async () => {
@@ -231,7 +244,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       display_name: displayName,
       avatar_url: user.user_metadata?.avatar_url ?? null,
       is_guest: user.is_anonymous ?? false,
-      wins: 0, losses: 0, elo: 1000, xp: 0, level: 1, credits: 1000,
+      wins: 0, losses: 0, elo: 1000, xp: 0, level: 1, credits: STARTING_CREDITS,
     }, { onConflict: 'id', ignoreDuplicates: true });
 
     const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
@@ -337,5 +350,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const storageId = get().isLocalGuest ? LOCAL_GUEST_ID : user.id;
     saveEncounteredToStorage(storageId, updated);
     set({ encountered: updated });
+  },
+
+  ensureStarterDeck: () => {
+    const { user, isLocalGuest } = get();
+    if (!user) return;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    if (wasStarterGiven(storageId)) return;
+    const machampDeck = STARTER_DECKS.find(d => d.id === 'starter-machamp');
+    if (!machampDeck) return;
+    const cardIds = machampDeck.cardIds.filter(id => !id.startsWith('basic-'));
+    get().addToCollection(cardIds);
+    markStarterGiven(storageId);
   },
 }));

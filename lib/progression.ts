@@ -40,39 +40,36 @@ export function computeLevel(totalXp: number): { level: number; xpIntoLevel: num
   return { level, xpIntoLevel: remaining, xpForNext: xpForNextLevel(level) };
 }
 
-// Set names exactly as they appear in cards.json, mapped to unlock level
-export const SET_UNLOCK_LEVELS: Record<string, number> = {
-  'Base': 1,
-  'Jungle': 4,
-  'Fossil': 7,
-  'Team Rocket': 11,
-  'Gym Heroes': 15,
-  'Gym Challenge': 19,
-  'Neo Genesis': 24,
-  'Neo Discovery': 29,
-  'Neo Revelation': 34,
-  'Neo Destiny': 39,
-  'Expedition Base Set': 44,
-  'Wizards Black Star Promos': 30,
-  'Aquapolis': 50,
-  'Skyridge': 56,
-  'Ruby & Sapphire': 62,
-  'Sandstorm': 68,
-  'Dragon': 74,
-  'Team Magma vs Team Aqua': 80,
-  'Hidden Legends': 86,
-  'FireRed & LeafGreen': 90,
-  // Base Set 2 and Diamond & Pearl excluded intentionally
-};
+// Ordered set progression — each set unlocks when you own ≥60% of its prerequisite.
+// prerequisite: null means always unlocked (Base Set).
+export const SET_PROGRESSION: Array<{ name: string; prerequisite: string | null }> = [
+  { name: 'Base Set',                 prerequisite: null },
+  { name: 'Jungle',                  prerequisite: 'Base Set' },
+  { name: 'Fossil',                  prerequisite: 'Jungle' },
+  { name: 'Team Rocket',             prerequisite: 'Fossil' },
+  { name: 'Gym Heroes',              prerequisite: 'Team Rocket' },
+  { name: 'Gym Challenge',           prerequisite: 'Gym Heroes' },
+  { name: 'Neo Genesis',             prerequisite: 'Gym Challenge' },
+  { name: 'Neo Discovery',           prerequisite: 'Neo Genesis' },
+  { name: 'Wizards Black Star Promos', prerequisite: 'Neo Discovery' },
+  { name: 'Neo Revelation',          prerequisite: 'Neo Discovery' },
+  { name: 'Neo Destiny',             prerequisite: 'Neo Revelation' },
+  { name: 'Expedition Base Set',     prerequisite: 'Neo Destiny' },
+  { name: 'Aquapolis',               prerequisite: 'Expedition Base Set' },
+  { name: 'Skyridge',                prerequisite: 'Aquapolis' },
+  { name: 'Ruby & Sapphire',         prerequisite: 'Skyridge' },
+  { name: 'Sandstorm',               prerequisite: 'Ruby & Sapphire' },
+  { name: 'Dragon',                  prerequisite: 'Sandstorm' },
+  { name: 'Team Magma vs Team Aqua', prerequisite: 'Dragon' },
+  { name: 'Hidden Legends',          prerequisite: 'Team Magma vs Team Aqua' },
+  { name: 'FireRed & LeafGreen',     prerequisite: 'Hidden Legends' },
+];
 
-export function isSetUnlocked(setName: string, level: number): boolean {
-  const required = SET_UNLOCK_LEVELS[setName];
-  if (required === undefined) return false; // Base Set 2 or unknown
-  return level >= required;
-}
-
-export const PACK_COST = 25;
+export const PACK_COST = 30;
+export const PACK_BUNDLE_5 = 125;
+export const PACK_BUNDLE_10 = 250;
 export const THEME_DECK_COST = 150;
+export const STARTING_CREDITS = 250;
 
 export const SINGLE_COSTS: Record<string, number> = {
   Common: 3,

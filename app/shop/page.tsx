@@ -2,38 +2,39 @@
 export const dynamic = 'force-dynamic';
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
-import { ALL_CARDS } from '@/lib/cardUtils';
+import { ALL_CARDS, isSetUnlocked, setCompletionPct } from '@/lib/cardUtils';
 import {
-  SET_UNLOCK_LEVELS, isSetUnlocked, PACK_COST, THEME_DECK_COST,
-  pickPackCards, computeLevel, singleCost,
+  SET_PROGRESSION, PACK_COST, PACK_BUNDLE_5, PACK_BUNDLE_10,
+  THEME_DECK_COST, pickPackCards, singleCost,
 } from '@/lib/progression';
 import { STARTER_DECKS } from '@/lib/starterDecks';
 import CardImage from '@/components/cards/CardImage';
 import type { CardData } from '@/engine/GameState';
 
 const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl']);
-const SHOP_SETS = Object.entries(SET_UNLOCK_LEVELS)
-  .filter(([s]) => !EXCLUDED.has(s))
-  .sort((a, b) => a[1] - b[1])
-  .map(([name, level]) => ({ name, level }));
+const SHOP_SETS = SET_PROGRESSION.filter(s => !EXCLUDED.has(s.name));
 
 export default function ShopPage() {
-  const { user, profile, addCredits, addXP, addToCollection } = useAuthStore();
+  const { user, profile, addCredits, addXP, addToCollection, collection } = useAuthStore();
   const [packResult, setPackResult] = useState<CardData[]>([]);
-  const [packSet, setPackSet] = useState('');
+  const [packLabel, setPackLabel] = useState('');
   const [tab, setTab] = useState<'packs' | 'decks' | 'singles'>('packs');
   const [singlesSearch, setSinglesSearch] = useState('');
   const [singlesSet, setSinglesSet] = useState('All');
 
   const credits = profile?.credits ?? 0;
-  const level = profile?.level ?? 1;
 
-  async function buyPack(setName: string) {
+  async function buyPacks(setName: string, count: number) {
     if (!user) { alert('Sign in to buy packs!'); return; }
-    if (credits < PACK_COST) { alert('Not enough credits!'); return; }
-    if (!isSetUnlocked(setName, level)) { alert(`Unlock this set at level ${SET_UNLOCK_LEVELS[setName]}!`); return; }
+    const cost = count === 1 ? PACK_COST : count === 5 ? PACK_BUNDLE_5 : PACK_BUNDLE_10;
+    if (credits < cost) { alert('Not enough credits!'); return; }
+    if (!isSetUnlocked(setName, collection)) {
+      const entry = SET_PROGRESSION.find(s => s.name === setName);
+      const pct = Math.round(setCompletionPct(entry?.prerequisite ?? '', collection) * 100);
+      alert(`Complete 60% of ${entry?.prerequisite} to unlock this set (you have ${pct}%).`);
+      return;
+    }
 
     const setCards = ALL_CARDS
       .filter(c => c.set === setName)
@@ -41,34 +42,50 @@ export default function ShopPage() {
 
     if (setCards.length === 0) { alert('No cards found for this set.'); return; }
 
-    const pickedIds = pickPackCards(setCards);
-    const pickedCards = pickedIds
+    const allIds: string[] = [];
+    for (let i = 0; i < count; i++) allIds.push(...pickPackCards(setCards));
+
+    const pickedCards = allIds
       .map(id => ALL_CARDS.find(c => c.id === id))
       .filter(Boolean) as CardData[];
 
-    await addCredits(-PACK_COST);
-    await addXP(25);
-    addToCollection(pickedIds);
+    await addCredits(-cost);
+    await addXP(25 * count);
+    addToCollection(allIds);
     setPackResult(pickedCards);
-    setPackSet(setName);
-  }
-
-  async function buyThemeDeck(deckId: string) {
-    const sd = STARTER_DECKS.find(s => s.id === deckId);
-    if (!sd) return;
-    if (credits < THEME_DECK_COST) { alert('Not enough credits!'); return; }
-    await addCredits(-THEME_DECK_COST);
-    alert(`${sd.name} theme deck is now available in the Deck Builder!`);
+    setPackLabel(`${count === 1 ? '1 Pack' : `${count} Packs`} — ${setName}`);
   }
 
   return (
     <div className="min-h-screen bg-gray-950 text-white p-4">
-      {/* Header */}
+      {/* Pack result overlay */}
+      {packResult.length > 0 && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <h2 className="text-xl font-bold text-yellow-400 mb-1">{packLabel}</h2>
+            <p className="text-sm text-gray-400 mb-4">{packResult.length} cards received</p>
+            <div className="overflow-y-auto flex-1">
+              <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
+                {packResult.map((card, i) => (
+                  <CardImage key={i} card={card} small />
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={() => setPackResult([])}
+              className="mt-4 w-full py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl"
+            >
+              Collect Cards
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-3xl mx-auto">
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-black text-yellow-400">Shop</h1>
-            <p className="text-sm text-gray-400">Level {level} Trainer</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-xl px-4 py-2 text-center">
@@ -98,58 +115,57 @@ export default function ShopPage() {
           ))}
         </div>
 
-        {/* Pack result overlay */}
-        {packResult.length > 0 && (
-          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-            <div className="bg-gray-900 rounded-2xl p-6 max-w-lg w-full">
-              <h2 className="text-xl font-bold text-yellow-400 mb-1">{packSet} Pack Opened!</h2>
-              <p className="text-sm text-gray-400 mb-4">You received {packResult.length} cards</p>
-              <div className="grid grid-cols-5 gap-2">
-                {packResult.map((card, i) => (
-                  <CardImage key={i} card={card} small />
-                ))}
-              </div>
-              <button
-                onClick={() => setPackResult([])}
-                className="mt-4 w-full py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl"
-              >
-                Collect Cards
-              </button>
-            </div>
-          </div>
-        )}
-
         {tab === 'packs' && (
           <div className="space-y-3">
-            <p className="text-sm text-gray-400">Each pack contains 10 cards (1 rare, 2 uncommon, 7 common).</p>
+            <div className="flex gap-4 text-xs text-gray-400 mb-2">
+              <span>1 pack — {PACK_COST} cr</span>
+              <span>5 packs — {PACK_BUNDLE_5} cr (save {PACK_COST * 5 - PACK_BUNDLE_5} cr)</span>
+              <span>10 packs — {PACK_BUNDLE_10} cr (save {PACK_COST * 10 - PACK_BUNDLE_10} cr)</span>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              {SHOP_SETS.map(({ name, level: reqLevel }) => {
-                const unlocked = isSetUnlocked(name, level);
+              {SHOP_SETS.map(({ name, prerequisite }) => {
+                const unlocked = isSetUnlocked(name, collection);
+                const pct = prerequisite ? Math.round(setCompletionPct(prerequisite, collection) * 100) : 100;
                 return (
                   <div
                     key={name}
                     className={`rounded-xl p-4 border transition-all ${
-                      unlocked
-                        ? 'bg-gray-800 border-gray-700'
-                        : 'bg-gray-900 border-gray-800 opacity-60'
+                      unlocked ? 'bg-gray-800 border-gray-700' : 'bg-gray-900 border-gray-800 opacity-70'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-3">
                       <div>
                         <div className="font-bold text-sm">{name}</div>
-                        {!unlocked && (
-                          <div className="text-xs text-yellow-500">Unlocks at Level {reqLevel}</div>
+                        {!unlocked && prerequisite && (
+                          <div className="text-xs text-yellow-500 mt-0.5">
+                            🔒 Complete {prerequisite} ({pct}% / 60%)
+                          </div>
+                        )}
+                        {unlocked && prerequisite && (
+                          <div className="text-xs text-green-500 mt-0.5">
+                            ✓ {prerequisite} completed
+                          </div>
                         )}
                       </div>
-                      <span className="text-yellow-400 font-bold text-sm">{PACK_COST} cr</span>
                     </div>
-                    <button
-                      onClick={() => buyPack(name)}
-                      disabled={!unlocked || credits < PACK_COST}
-                      className="w-full py-1.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-bold rounded-lg"
-                    >
-                      {unlocked ? 'Buy Pack' : `Level ${reqLevel} Required`}
-                    </button>
+                    <div className="flex gap-2">
+                      {[
+                        { count: 1, cost: PACK_COST, label: '1 Pack' },
+                        { count: 5, cost: PACK_BUNDLE_5, label: '5 Packs' },
+                        { count: 10, cost: PACK_BUNDLE_10, label: '10 Packs' },
+                      ].map(({ count, cost, label }) => (
+                        <button
+                          key={count}
+                          onClick={() => buyPacks(name, count)}
+                          disabled={!unlocked || credits < cost}
+                          className="flex-1 py-1.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-xs font-bold rounded-lg"
+                        >
+                          {label}
+                          <br />
+                          <span className="font-normal">{cost} cr</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 );
               })}
@@ -158,8 +174,7 @@ export default function ShopPage() {
         )}
 
         {tab === 'singles' && (() => {
-          const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl']);
-          const singlesPool = ALL_CARDS.filter(c => !EXCLUDED.has(c.set) && isSetUnlocked(c.set ?? '', level));
+          const singlesPool = ALL_CARDS.filter(c => !EXCLUDED.has(c.set) && isSetUnlocked(c.set ?? '', collection));
           const setSingles = singlesSet === 'All' ? singlesPool : singlesPool.filter(c => c.set === singlesSet);
           const displayed = setSingles
             .filter(c => !singlesSearch || c.name.toLowerCase().includes(singlesSearch.toLowerCase()))
@@ -172,7 +187,7 @@ export default function ShopPage() {
             if (credits < cost) { alert('Not enough credits!'); return; }
             await addCredits(-cost);
             addToCollection([card.id]);
-            alert(`Bought ${card.name}! Check your Deck Builder.`);
+            alert(`Bought ${card.name}!`);
           }
 
           return (
@@ -217,21 +232,36 @@ export default function ShopPage() {
 
         {tab === 'decks' && (
           <div className="space-y-3">
-            <p className="text-sm text-gray-400">Theme decks are pre-built 60-card decks, always available in the Deck Builder.</p>
+            <p className="text-sm text-gray-400">
+              Theme decks are pre-built 60-card decks. Each costs {THEME_DECK_COST} credits.
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {STARTER_DECKS.map(sd => (
                 <div key={sd.id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
                   <div className="font-bold mb-1">{sd.name}</div>
                   <div className="text-sm text-gray-400 mb-3">{sd.description}</div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-green-400 text-sm font-bold">Always Free</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-yellow-400 text-sm font-bold">{THEME_DECK_COST} credits</span>
                     <span className="text-xs text-gray-500">60 cards</span>
                   </div>
+                  <button
+                    onClick={async () => {
+                      if (!user) { alert('Sign in to buy decks!'); return; }
+                      if (credits < THEME_DECK_COST) { alert('Not enough credits!'); return; }
+                      await addCredits(-THEME_DECK_COST);
+                      addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
+                      alert(`${sd.name} added to your collection!`);
+                    }}
+                    disabled={credits < THEME_DECK_COST || !user}
+                    className="w-full py-1.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-bold rounded-lg"
+                  >
+                    {!user ? 'Sign in to buy' : credits < THEME_DECK_COST ? 'Not enough credits' : 'Buy Deck'}
+                  </button>
                   <Link
                     href="/deck-builder"
-                    className="mt-2 block text-center py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black text-sm font-bold rounded-lg"
+                    className="mt-2 block text-center py-1 text-xs text-gray-400 hover:text-white"
                   >
-                    Use in Builder
+                    Use starter in Builder →
                   </Link>
                 </div>
               ))}

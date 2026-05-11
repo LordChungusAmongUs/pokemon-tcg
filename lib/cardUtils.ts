@@ -1,5 +1,6 @@
 import cardsData from '@/data/cards.json';
 import type { CardData, CardInstance, EnergyInstance, EnergyType } from '@/engine/GameState';
+import { SET_PROGRESSION } from '@/lib/progression';
 
 export const ALL_CARDS: CardData[] = cardsData as CardData[];
 
@@ -139,4 +140,20 @@ export function typeEmoji(type: string): string {
     Colorless: '⬜', Dragon: '🐉', Fairy: '✨',
   };
   return map[type] || '?';
+}
+
+export function isSetUnlocked(setName: string, collection: Record<string, number>): boolean {
+  const entry = SET_PROGRESSION.find(s => s.name === setName);
+  if (!entry) return true;
+  if (entry.prerequisite === null) return true;
+  const prereqCards = ALL_CARDS.filter(c => c.set === entry.prerequisite);
+  if (prereqCards.length === 0) return true;
+  const ownedCount = prereqCards.filter(c => (collection[c.id] ?? 0) > 0).length;
+  return ownedCount / prereqCards.length >= 0.6;
+}
+
+export function setCompletionPct(setName: string, collection: Record<string, number>): number {
+  const cards = ALL_CARDS.filter(c => c.set === setName);
+  if (cards.length === 0) return 0;
+  return cards.filter(c => (collection[c.id] ?? 0) > 0).length / cards.length;
 }

@@ -14,6 +14,14 @@ import { runAITurn } from '@/ai/SimpleAI';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
 
+// Discriminated union for the bottom-sheet preview context
+type PreviewState =
+  | { source: 'hand';       uid: string; card: CardData }
+  | { source: 'own-active' }
+  | { source: 'own-bench';  slot: number }
+  | { source: 'opponent';   card: CardData }
+  | { source: 'retreat-pick' };
+
 export default function GamePage() {
   const {
     game, selectedHandUid,
@@ -24,7 +32,7 @@ export default function GamePage() {
   } = useGameStore();
 
   const [detailCard, setDetailCard] = useState<CardData | null>(null);
-  const [previewCard, setPreviewCard] = useState<CardData | null>(null);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
   const { awardGameResult, addEncountered } = useAuthStore();
   const [passModal, setPassModal] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
@@ -34,6 +42,8 @@ export default function GamePage() {
   const [setupPassShown, setSetupPassShown] = useState(false);
   const stateRef = useRef(game);
   stateRef.current = game;
+
+  const closePreview = () => setPreview(null);
 
   useEffect(() => {
     setSetupActiveUid(null);
@@ -72,6 +82,9 @@ export default function GamePage() {
     if (game.phase === 'draw') setPassModal(true);
   }, [game?.activePlayer, game?.turn]);
 
+  // Close preview whenever game state advances (e.g. AI moved)
+  useEffect(() => { setPreview(null); }, [game?.turn, game?.activePlayer]);
+
   if (!game) {
     return (
       <div className="h-screen bg-green-950 flex items-center justify-center text-white">
@@ -85,7 +98,7 @@ export default function GamePage() {
     );
   }
 
-  // ── Setup phase ─────────────────────────────────────────────────────────────
+  // ── Setup phase ──────────────────────────────────────────────────────────────
   if (game.phase === 'setup') {
     const isP2Step = game.setupStep === 'p2-setup';
     const setupPlayerId = isP2Step ? 'player2' : 'player1';
@@ -97,10 +110,8 @@ export default function GamePage() {
           <div className="bg-gray-800 rounded-2xl p-8 text-center space-y-4 max-w-sm">
             <p className="text-2xl font-bold text-white">Pass to {game.player2.name}</p>
             <p className="text-gray-400 text-sm">Hand the device to {game.player2.name}.</p>
-            <button
-              onClick={() => setSetupPassShown(true)}
-              className="w-full py-3 bg-yellow-500 rounded-xl font-bold text-black hover:bg-yellow-400"
-            >
+            <button onClick={() => setSetupPassShown(true)}
+              className="w-full py-3 bg-yellow-500 rounded-xl font-bold text-black hover:bg-yellow-400">
               I'm {game.player2.name} — Ready!
             </button>
           </div>
@@ -140,7 +151,6 @@ export default function GamePage() {
                 : `Active: ${basics.find(c => c.uid === setupActiveUid)?.card.name}. Tap more basics to bench them.`}
             </p>
           </div>
-
           <div className="grid grid-cols-3 gap-3">
             {basics.map(c => {
               const isActive = setupActiveUid === c.uid;
@@ -149,8 +159,7 @@ export default function GamePage() {
                 <div key={c.uid} className="flex flex-col items-center gap-1 cursor-pointer" onClick={() => handleBasicClick(c.uid)}>
                   <div className={`rounded-xl overflow-hidden border-2 transition-all ${
                     isActive ? 'border-yellow-400 ring-2 ring-yellow-400' :
-                    isBenched ? 'border-blue-400 ring-2 ring-blue-400' :
-                    'border-transparent'
+                    isBenched ? 'border-blue-400 ring-2 ring-blue-400' : 'border-transparent'
                   }`}>
                     <CardImage card={c.card} small />
                   </div>
@@ -161,7 +170,6 @@ export default function GamePage() {
               );
             })}
           </div>
-
           {others.length > 0 && (
             <div>
               <p className="text-xs text-gray-500 mb-2">Stays in hand:</p>
@@ -175,12 +183,8 @@ export default function GamePage() {
               </div>
             </div>
           )}
-
-          <button
-            onClick={handleConfirm}
-            disabled={!setupActiveUid}
-            className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-bold rounded-xl text-lg"
-          >
+          <button onClick={handleConfirm} disabled={!setupActiveUid}
+            className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-bold rounded-xl text-lg">
             Ready!
           </button>
         </div>
@@ -188,55 +192,260 @@ export default function GamePage() {
     );
   }
 
+  // ── Game state helpers ───────────────────────────────────────────────────────
   const p1 = game.player1;
   const p2 = game.player2;
   const isP1Turn = game.activePlayer === 'player1';
   const activePlayer = isP1Turn ? p1 : p2;
   const selectedCard = selectedHandUid ? activePlayer.hand.find(c => c.uid === selectedHandUid) : null;
   const isEnergySelected = selectedCard?.card.supertype === 'Energy';
-  const isBasicSelected = selectedCard ? isBasicPokemon(selectedCard.card) : false;
-  const isEvoSelected = selectedCard?.card.evolvesFrom != null;
-
-  function handleBenchClick(player: 'player1' | 'player2', slot: number) {
-    if (player !== game!.activePlayer) return;
-    const bench = game![player].bench[slot];
-
-    if (isEnergySelected && selectedHandUid && bench) {
-      attachEnergyAction(selectedHandUid, bench.uid); return;
-    }
-    if (isEvoSelected && selectedHandUid && bench) {
-      evolveAction(selectedHandUid, bench.uid); return;
-    }
-    if (isBasicSelected && selectedHandUid && !bench) {
-      playBasic(selectedHandUid, slot); return;
-    }
-    if (!game![player].active) {
-      promoteFromBench(slot); return;
-    }
-    if (bench) setPreviewCard(bench.card);
-  }
-
-  const canRetreat = isP1Turn && !p1.retreatedThisTurn && p1.active &&
+  const isBasicSelected  = selectedCard ? isBasicPokemon(selectedCard.card) : false;
+  const isEvoSelected    = selectedCard?.card.evolvesFrom != null;
+  const canRetreat = isP1Turn && !p1.retreatedThisTurn && !!p1.active &&
     p1.active.attachedEnergy.length >= p1.active.card.retreatCost.length &&
     p1.bench.some(b => b !== null);
+
+  function handleP1BenchClick(slot: number) {
+    const bench = p1.bench[slot];
+    if (isEnergySelected && selectedHandUid && bench) { attachEnergyAction(selectedHandUid, bench.uid); return; }
+    if (isEvoSelected    && selectedHandUid && bench) { evolveAction(selectedHandUid, bench.uid);       return; }
+    if (isBasicSelected  && selectedHandUid && !bench){ playBasic(selectedHandUid, slot);               return; }
+    if (!p1.active && bench) { promoteFromBench(slot); return; }
+    if (bench) setPreview({ source: 'own-bench', slot });
+  }
+
+  function handleP1ActiveClick() {
+    if (isEnergySelected && selectedHandUid && p1.active) { attachEnergyAction(selectedHandUid, p1.active.uid); return; }
+    if (isEvoSelected    && selectedHandUid && p1.active) { evolveAction(selectedHandUid, p1.active.uid);       return; }
+    setPreview({ source: 'own-active' });
+  }
+
+  // ── Preview sheet data ───────────────────────────────────────────────────────
+  let previewCard: CardData | null = null;
+  let previewHp: { remaining: number; max: number } | null = null;
+  let previewStatus: string | null = null;
+
+  if (preview) {
+    if (preview.source === 'hand') {
+      previewCard = preview.card;
+    } else if (preview.source === 'own-active' && p1.active) {
+      previewCard = p1.active.card;
+      previewHp = { remaining: Math.max(0, (p1.active.card.hp ?? 0) - p1.active.damageTaken), max: p1.active.card.hp ?? 0 };
+      previewStatus = p1.active.statusCondition;
+    } else if (preview.source === 'own-bench') {
+      const b = p1.bench[preview.slot];
+      if (b) {
+        previewCard = b.card;
+        previewHp = { remaining: Math.max(0, (b.card.hp ?? 0) - b.damageTaken), max: b.card.hp ?? 0 };
+        previewStatus = b.statusCondition;
+      }
+    } else if (preview.source === 'opponent') {
+      previewCard = preview.card;
+    }
+  }
 
   return (
     <div className="h-dvh bg-green-950 text-white flex flex-col select-none">
 
-      {/* Card preview overlay */}
-      {previewCard && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-40"
-          onClick={() => setPreviewCard(null)}
-        >
-          <div className="relative w-52 h-[290px] rounded-xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-            <Image
-              src={cardImageSrc(previewCard)}
-              alt={previewCard.name}
-              fill
-              className="object-contain"
-              unoptimized
-            />
+      {/* ── Bottom-sheet preview overlay ─────────────────────── */}
+      {preview && (
+        <div className="fixed inset-0 bg-black/75 z-40 flex flex-col justify-end"
+          onClick={closePreview}>
+          <div className="bg-gray-900 rounded-t-2xl max-h-[88vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+
+            {/* Drag handle */}
+            <div className="flex justify-center pt-2 pb-0">
+              <div className="w-10 h-1 bg-gray-600 rounded-full" />
+            </div>
+
+            {/* ── Retreat picker (no card image, just bench grid) ── */}
+            {preview.source === 'retreat-pick' ? (
+              <div className="p-4">
+                <p className="text-white font-bold text-lg text-center mb-3">Choose Replacement</p>
+                <div className="flex flex-wrap justify-center gap-3 mb-4">
+                  {p1.bench.map((poke, slot) => poke ? (
+                    <button key={slot} className="flex flex-col items-center gap-1"
+                      onClick={() => { retreatAction(slot); closePreview(); }}>
+                      <div className="relative w-16 h-[90px] rounded-lg overflow-hidden border-2 border-blue-500 hover:border-blue-300">
+                        <Image src={cardImageSrc(poke.card)} alt={poke.card.name} fill className="object-cover" unoptimized sizes="64px" />
+                      </div>
+                      <span className="text-white text-[10px] max-w-[64px] truncate">{poke.card.name}</span>
+                      <span className="text-gray-400 text-[9px]">
+                        {Math.max(0, (poke.card.hp ?? 0) - poke.damageTaken)}/{poke.card.hp} HP
+                      </span>
+                    </button>
+                  ) : null)}
+                </div>
+                <button onClick={() => setPreview({ source: 'own-active' })}
+                  className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl">
+                  Back
+                </button>
+              </div>
+            ) : previewCard ? (
+              <>
+                {/* Card image */}
+                <div className="flex justify-center px-4 pt-3">
+                  <div className="relative w-40 h-[224px] rounded-xl overflow-hidden shadow-xl">
+                    <Image src={cardImageSrc(previewCard)} alt={previewCard.name} fill className="object-contain" unoptimized sizes="160px" />
+                  </div>
+                </div>
+
+                {/* Card name + live HP */}
+                <div className="text-center px-4 mt-2 mb-1">
+                  <p className="text-white font-bold text-lg leading-tight">{previewCard.name}</p>
+                  {previewHp && (
+                    <p className="text-gray-400 text-sm">
+                      {previewHp.remaining}/{previewHp.max} HP
+                      {previewStatus && <span className="ml-2 text-yellow-400">· {previewStatus}</span>}
+                    </p>
+                  )}
+                </div>
+
+                {/* ── Action buttons ─────────────────────────────── */}
+                <div className="flex flex-col gap-2 p-4 pt-2">
+
+                  {/* HAND card */}
+                  {preview.source === 'hand' && (() => {
+                    const card = preview.card;
+                    const label = card.supertype === 'Energy'
+                      ? 'Attach Energy'
+                      : card.supertype === 'Trainer'
+                      ? 'Play Trainer'
+                      : card.evolvesFrom
+                      ? `Evolve (${card.evolvesFrom} → ${card.name})`
+                      : 'Play to Bench';
+                    return (
+                      <>
+                        <button
+                          disabled={!isP1Turn}
+                          onClick={() => {
+                            if (!isP1Turn) return;
+                            if (card.supertype === 'Trainer') {
+                              playTrainerAction(preview.uid);
+                            } else {
+                              selectHandCard(preview.uid);
+                            }
+                            closePreview();
+                          }}
+                          className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-black font-bold rounded-xl text-base">
+                          {label}
+                        </button>
+                        <button onClick={closePreview}
+                          className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl">
+                          Back
+                        </button>
+                      </>
+                    );
+                  })()}
+
+                  {/* OWN ACTIVE */}
+                  {preview.source === 'own-active' && p1.active && (() => {
+                    const poke = p1.active;
+                    return (
+                      <>
+                        {/* Attacks */}
+                        {poke.card.attacks.map((atk, i) => {
+                          const can = isP1Turn && !p1.hasAttackedThisTurn && canPayCost(atk.cost, poke.attachedEnergy);
+                          return (
+                            <button key={i} disabled={!can}
+                              onClick={() => { attackAction(i); closePreview(); }}
+                              className={`w-full py-2.5 rounded-xl font-medium flex justify-between items-center px-4 ${
+                                can ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                              }`}>
+                              <span>⚔️ {atk.name}</span>
+                              <span className="font-bold">{atk.damageStr || (atk.damage ? `${atk.damage}` : '—')}</span>
+                            </button>
+                          );
+                        })}
+
+                        {/* Abilities / Pokémon Powers */}
+                        {poke.card.abilities.map((ab, i) => (
+                          <div key={i} className="w-full p-3 bg-purple-900/60 border border-purple-700/60 rounded-xl">
+                            <p className="text-purple-300 font-bold text-sm">{ab.type}: {ab.name}</p>
+                            <p className="text-gray-300 text-xs mt-0.5 leading-snug">{ab.text}</p>
+                          </div>
+                        ))}
+
+                        {/* Retreat */}
+                        {isP1Turn && canRetreat && (
+                          <button onClick={() => setPreview({ source: 'retreat-pick' })}
+                            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium">
+                            🔄 Retreat
+                          </button>
+                        )}
+
+                        <button onClick={closePreview}
+                          className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-sm">
+                          Back
+                        </button>
+                      </>
+                    );
+                  })()}
+
+                  {/* OWN BENCH */}
+                  {preview.source === 'own-bench' && (() => {
+                    const poke = p1.bench[preview.slot];
+                    if (!poke) return null;
+                    return (
+                      <>
+                        {/* Abilities */}
+                        {poke.card.abilities.map((ab, i) => (
+                          <div key={i} className="w-full p-3 bg-purple-900/60 border border-purple-700/60 rounded-xl">
+                            <p className="text-purple-300 font-bold text-sm">{ab.type}: {ab.name}</p>
+                            <p className="text-gray-300 text-xs mt-0.5 leading-snug">{ab.text}</p>
+                          </div>
+                        ))}
+
+                        {/* Promote (no active) */}
+                        {isP1Turn && !p1.active && (
+                          <button onClick={() => { promoteFromBench(preview.slot); closePreview(); }}
+                            className="w-full py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-xl font-medium">
+                            Send Out
+                          </button>
+                        )}
+
+                        {/* Swap in via retreat */}
+                        {isP1Turn && canRetreat && (
+                          <button onClick={() => { retreatAction(preview.slot); closePreview(); }}
+                            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium">
+                            🔄 Swap In
+                          </button>
+                        )}
+
+                        <button onClick={closePreview}
+                          className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-sm">
+                          Back
+                        </button>
+                      </>
+                    );
+                  })()}
+
+                  {/* OPPONENT card — read-only */}
+                  {preview.source === 'opponent' && (
+                    <>
+                      {/* Show opponent's abilities for info */}
+                      {previewCard.abilities.map((ab, i) => (
+                        <div key={i} className="w-full p-3 bg-gray-800 border border-gray-700 rounded-xl">
+                          <p className="text-gray-300 font-bold text-sm">{ab.type}: {ab.name}</p>
+                          <p className="text-gray-400 text-xs mt-0.5 leading-snug">{ab.text}</p>
+                        </div>
+                      ))}
+                      <button onClick={closePreview}
+                        className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl">
+                        Back
+                      </button>
+                    </>
+                  )}
+
+                </div>
+              </>
+            ) : (
+              /* Fallback — shouldn't happen */
+              <div className="p-4">
+                <button onClick={closePreview} className="w-full py-2.5 bg-gray-700 text-white rounded-xl">Back</button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -288,7 +497,7 @@ export default function GamePage() {
         <div className="flex gap-1 justify-center px-2 pb-1 bg-green-900/50">
           {p2.bench.map((poke, i) =>
             poke
-              ? <InPlayCard key={poke.uid} pokemon={poke} small onClick={() => setPreviewCard(poke.card)} />
+              ? <InPlayCard key={poke.uid} pokemon={poke} small onClick={() => setPreview({ source: 'opponent', card: poke.card })} />
               : <EmptySlot key={i} small />
           )}
         </div>
@@ -296,7 +505,7 @@ export default function GamePage() {
         {/* P2 active */}
         <div className="flex justify-center py-1 bg-green-900/30">
           {p2.active
-            ? <InPlayCard pokemon={p2.active} isActive small onClick={() => setPreviewCard(p2.active!.card)} />
+            ? <InPlayCard pokemon={p2.active} isActive small onClick={() => setPreview({ source: 'opponent', card: p2.active!.card })} />
             : <EmptySlot label="Active" small />
           }
         </div>
@@ -311,55 +520,19 @@ export default function GamePage() {
 
         {/* P1 active */}
         <div className="flex flex-col items-center py-1 gap-0.5 bg-green-900/30">
-          {p1.active ? (
-            <>
-              <InPlayCard
-                pokemon={p1.active}
-                isActive
-                small
-                onClick={() => {
-                  if (isEnergySelected && selectedHandUid) { attachEnergyAction(selectedHandUid, p1.active!.uid); return; }
-                  if (isEvoSelected && selectedHandUid) { evolveAction(selectedHandUid, p1.active!.uid); return; }
-                  setPreviewCard(p1.active!.card);
-                }}
-              />
-              {isP1Turn && !p1.hasAttackedThisTurn && (
-                <div className="flex gap-1 flex-wrap justify-center">
-                  {p1.active.card.attacks.map((atk, i) => {
-                    const can = canPayCost(atk.cost, p1.active!.attachedEnergy);
-                    return (
-                      <button key={i} disabled={!can} onClick={() => attackAction(i)}
-                        className={`text-[10px] px-1.5 py-0.5 rounded leading-tight ${can ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}>
-                        {atk.name} {atk.damageStr || (atk.damage ? `${atk.damage}` : '')}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          ) : (
-            <EmptySlot label="Active" small />
-          )}
+          {p1.active
+            ? <InPlayCard pokemon={p1.active} isActive small onClick={handleP1ActiveClick} />
+            : <EmptySlot label="Active" small />
+          }
         </div>
 
         {/* P1 bench */}
         <div className="flex gap-1 justify-center px-2 py-1 bg-green-900/50">
           {p1.bench.map((poke, i) =>
             poke ? (
-              <div key={poke.uid} className="flex flex-col items-center gap-0.5">
-                <InPlayCard
-                  pokemon={poke}
-                  small
-                  selected={isEnergySelected || isEvoSelected}
-                  onClick={() => handleBenchClick('player1', i)}
-                />
-                {isP1Turn && canRetreat && (
-                  <button onClick={() => retreatAction(i)}
-                    className="text-[9px] px-1 py-0.5 bg-blue-700 hover:bg-blue-600 rounded leading-none">
-                    Swap
-                  </button>
-                )}
-              </div>
+              <InPlayCard key={poke.uid} pokemon={poke} small
+                selected={isEnergySelected || isEvoSelected}
+                onClick={() => handleP1BenchClick(i)} />
             ) : (
               <EmptySlot key={i} small
                 highlight={isBasicSelected && isP1Turn}
@@ -368,7 +541,7 @@ export default function GamePage() {
           )}
         </div>
 
-      </div>{/* end scrollable board */}
+      </div>
 
       {/* ── Controls — always visible ─────────────────────────── */}
       <div className="flex-none flex items-center justify-between px-3 py-1.5 bg-green-900/60 border-t border-green-800/60">
@@ -397,7 +570,7 @@ export default function GamePage() {
       </div>
 
       {/* ── Hand — always visible ─────────────────────────────── */}
-      <div className="flex-none bg-black/50 px-2 pt-1 pb-safe-2" style={{ minHeight: 100 }}>
+      <div className="flex-none bg-black/50 px-2 pt-1 pb-2" style={{ minHeight: 100 }}>
         {selectedCard && (
           <p className="text-[10px] text-yellow-300 mb-0.5 leading-tight">
             {selectedCard.card.name}: {
@@ -414,11 +587,7 @@ export default function GamePage() {
                 card={c.card}
                 small
                 selected={selectedHandUid === c.uid}
-                onClick={() => {
-                  if (c.card.supertype === 'Trainer' && isP1Turn) { playTrainerAction(c.uid); return; }
-                  selectHandCard(selectedHandUid === c.uid ? null : c.uid);
-                  setPreviewCard(c.card);
-                }}
+                onClick={() => setPreview({ source: 'hand', uid: c.uid, card: c.card })}
               />
               <span
                 className="text-[9px] text-gray-400 text-center max-w-14 truncate leading-tight cursor-pointer hover:text-white"

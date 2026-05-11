@@ -95,45 +95,35 @@ export default function HomePage() {
 
         {/* Quick links */}
         <div className="grid grid-cols-2 gap-3">
-          <Link
-            href="/collection"
-            className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all"
-          >
+          <Link href="/collection" className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all">
             <div className="text-3xl">🗂️</div>
             <div className="font-semibold mt-1">Collection</div>
             <div className="text-xs text-gray-400">{ALL_CARDS.length} cards</div>
           </Link>
-          <Link
-            href="/deck-builder"
-            className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all"
-          >
+          <Link href="/deck-builder" className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all">
             <div className="text-3xl">🃏</div>
             <div className="font-semibold mt-1">Deck Builder</div>
             <div className="text-xs text-gray-400">{allDecks.length} saved decks</div>
           </Link>
-        </div>
-
-        {/* Lobby + Shop (signed in) */}
-        {user && (
-          <div className="grid grid-cols-2 gap-3">
-            <Link
-              href="/lobby"
-              className="block bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-2xl p-4 text-center transition-all"
-            >
-              <div className="text-2xl">🌐</div>
+          <Link href="/shop" className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all">
+            <div className="text-3xl">🏪</div>
+            <div className="font-semibold mt-1">Shop</div>
+            <div className="text-xs text-yellow-400">{user ? `${profile?.credits ?? 0} credits` : 'Sign in to buy'}</div>
+          </Link>
+          {user ? (
+            <Link href="/lobby" className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-2xl p-4 text-center transition-all">
+              <div className="text-3xl">🌐</div>
               <div className="font-bold mt-1">Lobby</div>
               <div className="text-xs">Online Play</div>
             </Link>
-            <Link
-              href="/shop"
-              className="block bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all"
-            >
-              <div className="text-2xl">🏪</div>
-              <div className="font-semibold mt-1">Shop</div>
-              <div className="text-xs text-yellow-400">{profile?.credits ?? 0} credits</div>
+          ) : (
+            <Link href="/login" className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all">
+              <div className="text-3xl">🔑</div>
+              <div className="font-semibold mt-1">Sign In</div>
+              <div className="text-xs text-gray-400">Save progress</div>
             </Link>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Game setup */}
         <div className="bg-white/10 rounded-2xl p-5 space-y-4">

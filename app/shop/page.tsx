@@ -21,7 +21,6 @@ const SHOP_SETS = Object.entries(SET_UNLOCK_LEVELS)
 
 export default function ShopPage() {
   const { user, profile, addCredits, addXP } = useAuthStore();
-  const router = useRouter();
   const [packResult, setPackResult] = useState<CardData[]>([]);
   const [packSet, setPackSet] = useState('');
   const [tab, setTab] = useState<'packs' | 'decks'>('packs');
@@ -29,18 +28,8 @@ export default function ShopPage() {
   const credits = profile?.credits ?? 0;
   const level = profile?.level ?? 1;
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <p className="text-gray-400">Sign in to access the shop.</p>
-          <Link href="/login" className="text-yellow-400 underline">Sign in</Link>
-        </div>
-      </div>
-    );
-  }
-
   async function buyPack(setName: string) {
+    if (!user) { alert('Sign in to buy packs!'); return; }
     if (credits < PACK_COST) { alert('Not enough credits!'); return; }
     if (!isSetUnlocked(setName, level)) { alert(`Unlock this set at level ${SET_UNLOCK_LEVELS[setName]}!`); return; }
 

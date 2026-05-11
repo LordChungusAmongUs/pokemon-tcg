@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
-import { ALL_CARDS, isSetUnlocked, setCompletionPct } from '@/lib/cardUtils';
+import { ALL_CARDS, BASIC_ENERGY_CARDS, isSetUnlocked, setCompletionPct } from '@/lib/cardUtils';
 import {
   SET_PROGRESSION, PACK_COST, PACK_BUNDLE_5, PACK_BUNDLE_10,
   THEME_DECK_COST, pickPackCards, singleCost,
@@ -16,7 +16,7 @@ const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl']);
 const SHOP_SETS = SET_PROGRESSION.filter(s => !EXCLUDED.has(s.name));
 
 export default function ShopPage() {
-  const { user, profile, addCredits, addXP, addToCollection, collection } = useAuthStore();
+  const { user, profile, addCredits, addToCollection, collection } = useAuthStore();
   const [packResult, setPackResult] = useState<CardData[]>([]);
   const [packLabel, setPackLabel] = useState('');
   const [tab, setTab] = useState<'packs' | 'decks' | 'singles'>('packs');
@@ -42,16 +42,26 @@ export default function ShopPage() {
 
     if (setCards.length === 0) { alert('No cards found for this set.'); return; }
 
+    const BASE_ENERGY_TYPES = ['fire', 'water', 'grass', 'lightning', 'psychic', 'fighting'];
+    const allCardsPool = [...ALL_CARDS, ...BASIC_ENERGY_CARDS];
+
     const allIds: string[] = [];
-    for (let i = 0; i < count; i++) allIds.push(...pickPackCards(setCards));
+    for (let i = 0; i < count; i++) {
+      allIds.push(...pickPackCards(setCards));
+      if (setName === 'Base') {
+        for (let j = 0; j < 2; j++) {
+          const t = BASE_ENERGY_TYPES[Math.floor(Math.random() * BASE_ENERGY_TYPES.length)];
+          allIds.push(`basic-energy-${t}`);
+        }
+      }
+    }
 
     const pickedCards = allIds
-      .map(id => ALL_CARDS.find(c => c.id === id))
+      .map(id => allCardsPool.find(c => c.id === id))
       .filter(Boolean) as CardData[];
 
     await addCredits(-cost);
-    await addXP(25 * count);
-    addToCollection(allIds);
+    addToCollection(allIds.filter(id => !id.startsWith('basic-energy-')));
     setPackResult(pickedCards);
     setPackLabel(`${count === 1 ? '1 Pack' : `${count} Packs`} — ${setName}`);
   }

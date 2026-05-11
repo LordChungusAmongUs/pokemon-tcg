@@ -98,24 +98,40 @@ export function rarityWeight(rarity: string): RarityWeight {
   return 'Common';
 }
 
-export function pickPackCards(setCards: { id: string; rarity: string }[], count = 10): string[] {
-  const commons = setCards.filter(c => rarityWeight(c.rarity) === 'Common');
-  const uncommons = setCards.filter(c => rarityWeight(c.rarity) === 'Uncommon');
-  const rares = setCards.filter(c => rarityWeight(c.rarity) === 'Rare');
+// Returns 9 cards: 1 rare slot, 3 uncommon, 5 common
+// Rare slot is 2:1 regular rare vs holo/super rare
+export function pickPackCards(setCards: { id: string; rarity: string }[]): string[] {
+  if (setCards.length === 0) return [];
 
-  const pick = (pool: typeof setCards, n: number) => {
+  const allRares     = setCards.filter(c => rarityWeight(c.rarity) === 'Rare');
+  const holos        = allRares.filter(c => c.rarity.toLowerCase() !== 'rare');
+  const regularRares = allRares.filter(c => c.rarity.toLowerCase() === 'rare');
+  const uncommons    = setCards.filter(c => rarityWeight(c.rarity) === 'Uncommon');
+  const commons      = setCards.filter(c => rarityWeight(c.rarity) === 'Common');
+
+  const rnd = (pool: { id: string }[]): string =>
+    pool[Math.floor(Math.random() * pool.length)].id;
+
+  const pickN = (preferred: typeof setCards, fallback: typeof setCards, n: number): string[] => {
+    const pool = preferred.length > 0 ? preferred : fallback;
     const out: string[] = [];
-    for (let i = 0; i < n; i++) {
-      if (pool.length === 0) break;
-      out.push(pool[Math.floor(Math.random() * pool.length)].id);
-    }
+    for (let i = 0; i < n; i++) out.push(rnd(pool));
     return out;
   };
 
-  // 1 rare, 2 uncommons, 7 commons (adjust if pools are small)
+  // Rare slot: 1/3 holo, 2/3 regular rare; fall back gracefully if one pool is empty
+  let rareId: string;
+  if (allRares.length === 0) {
+    rareId = rnd(uncommons.length > 0 ? uncommons : setCards);
+  } else if (holos.length === 0 || regularRares.length === 0) {
+    rareId = rnd(allRares);
+  } else {
+    rareId = Math.random() < 1 / 3 ? rnd(holos) : rnd(regularRares);
+  }
+
   return [
-    ...pick(rares.length ? rares : setCards, 1),
-    ...pick(uncommons.length ? uncommons : setCards, 2),
-    ...pick(commons.length ? commons : setCards, count - 3),
+    rareId,
+    ...pickN(uncommons, setCards, 3),
+    ...pickN(commons, setCards, 5),
   ];
 }

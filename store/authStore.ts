@@ -77,7 +77,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     // Restore local guest session first (works without any Supabase setup)
     const savedGuest = loadLocalGuest();
     if (savedGuest) {
-      set({ user: fakeUser(), profile: savedGuest, isLocalGuest: true, loading: false });
+      // Patch corrupted profiles that somehow got 0 credits with no XP spent
+      const isEmpty = (savedGuest.credits ?? 0) === 0 && (savedGuest.xp ?? 0) === 0 && (savedGuest.wins ?? 0) === 0;
+      const profile = isEmpty ? { ...savedGuest, credits: 1000 } : savedGuest;
+      if (isEmpty) saveLocalGuest(profile);
+      set({ user: fakeUser(), profile, isLocalGuest: true, loading: false });
       return;
     }
 
@@ -138,12 +142,21 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           wins: 0, losses: 0, elo: 1000, xp: 0, level: 1, credits: 1000,
         });
         await get().refreshProfile();
+        // If credits still 0 (e.g. schema migration not run), force-patch
+        const { profile } = get();
+        if (profile && (profile.credits ?? 0) === 0) {
+          await supabase.from('profiles').update({ credits: 1000 }).eq('id', data.user.id);
+          await get().refreshProfile();
+        }
         return;
       }
     }
 
     // Fallback: localStorage-based guest (no Supabase needed)
-    const profile = loadLocalGuest() ?? makeGuestProfile();
+    const stored = loadLocalGuest();
+    // A stored profile with 0 credits AND 0 xp is a bad init — reset it
+    const isEmpty = stored && (stored.credits ?? 0) === 0 && (stored.xp ?? 0) === 0 && (stored.wins ?? 0) === 0;
+    const profile = (!stored || isEmpty) ? makeGuestProfile() : stored;
     saveLocalGuest(profile);
     set({ user: fakeUser(), profile, isLocalGuest: true, loading: false });
   },

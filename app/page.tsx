@@ -21,7 +21,7 @@ function deckToCards(deck: LocalDeck): CardData[] {
 }
 
 export default function HomePage() {
-  const { user, profile, decks: cloudDecks, signOut, resetAccount } = useAuthStore();
+  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount } = useAuthStore();
   const [localDecks, setLocalDecks] = useState<LocalDeck[]>([]);
   const [p1Deck, setP1Deck] = useState('');
   const [p2Deck, setP2Deck] = useState('');
@@ -31,7 +31,7 @@ export default function HomePage() {
   const { startGame } = useGameStore();
   const router = useRouter();
 
-  const allDecks: { name: string; cardIds: string[] }[] = user
+  const allDecks: { name: string; cardIds: string[] }[] = (user && !isLocalGuest)
     ? cloudDecks.map(d => ({ name: d.name, cardIds: d.card_ids }))
     : localDecks;
 

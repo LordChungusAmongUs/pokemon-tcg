@@ -35,7 +35,7 @@ function deckToCards(cardIds: string[]): CardData[] {
 }
 
 export default function DeckBuilderPage() {
-  const { user, profile, decks: cloudDecks, saveDeck: saveCloudDeck, deleteDeck: deleteCloudDeck, refreshDecks, collection } = useAuthStore();
+  const { user, profile, isLocalGuest, decks: cloudDecks, saveDeck: saveCloudDeck, deleteDeck: deleteCloudDeck, refreshDecks, collection } = useAuthStore();
   const playerLevel = profile?.level ?? 1;
 
   const [search, setSearch] = useState('');
@@ -110,7 +110,7 @@ export default function DeckBuilderPage() {
 
   async function handleSave() {
     const cardIds = deck.map(c => c.id);
-    if (user) {
+    if (user && !isLocalGuest) {
       await saveCloudDeck(deckName, cardIds, editingDeckId);
     } else {
       saveLocalDeck({ name: deckName, cardIds });
@@ -284,8 +284,8 @@ export default function DeckBuilderPage() {
           </div>
         </div>
 
-        {/* Cloud decks (signed in) */}
-        {user && cloudDecks.length > 0 && (
+        {/* Cloud decks (signed in, non-guest) */}
+        {user && !isLocalGuest && cloudDecks.length > 0 && (
           <div className="p-2 border-b border-gray-800">
             <p className="text-xs text-gray-400 mb-1">☁️ Your Decks</p>
             <div className="space-y-1">
@@ -308,8 +308,8 @@ export default function DeckBuilderPage() {
             </div>
           </div>
         )}
-        {/* Local decks (guest/offline) */}
-        {!user && localDecks.length > 0 && (
+        {/* Local decks (guest or offline) */}
+        {(!user || isLocalGuest) && localDecks.length > 0 && (
           <div className="p-2 border-b border-gray-800">
             <p className="text-xs text-gray-400 mb-1">Saved Decks</p>
             <div className="space-y-1">

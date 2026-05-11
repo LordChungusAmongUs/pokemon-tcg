@@ -482,32 +482,31 @@ export default function GamePage() {
       {/* ── Scrollable board ─────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
 
-        {/* P2 header */}
-        <div className="flex items-center justify-between text-xs text-gray-300 px-2 pt-1 pb-0.5 bg-green-900/50">
-          <span className="font-bold text-yellow-300 truncate max-w-24">{p2.name}</span>
-          <div className="flex gap-2">
-            <span>✋{p2.hand.length}</span>
-            <span>🎴{p2.deck.length}</span>
-            <span>🏆{p2.prizes.length}</span>
-            {aiRunning && <span className="text-yellow-400 animate-pulse">thinking…</span>}
+        {/* P2 zone — compact strip: header + active + bench in one block */}
+        <div className="bg-green-900/50 px-2 pt-1 pb-1.5">
+          <div className="flex items-center justify-between text-xs text-gray-300 mb-1">
+            <span className="font-bold text-yellow-300 truncate max-w-24">{p2.name}</span>
+            <div className="flex gap-2">
+              <span>✋{p2.hand.length}</span>
+              <span>🎴{p2.deck.length}</span>
+              <span>🏆{p2.prizes.length}</span>
+              {aiRunning && <span className="text-yellow-400 animate-pulse">thinking…</span>}
+            </div>
           </div>
-        </div>
-
-        {/* P2 bench */}
-        <div className="flex gap-1 justify-center px-2 pb-1 bg-green-900/50">
-          {p2.bench.map((poke, i) =>
-            poke
-              ? <InPlayCard key={poke.uid} pokemon={poke} small onClick={() => setPreview({ source: 'opponent', card: poke.card })} />
-              : <EmptySlot key={i} small />
-          )}
-        </div>
-
-        {/* P2 active */}
-        <div className="flex justify-center py-1 bg-green-900/30">
-          {p2.active
-            ? <InPlayCard pokemon={p2.active} isActive small onClick={() => setPreview({ source: 'opponent', card: p2.active!.card })} />
-            : <EmptySlot label="Active" small />
-          }
+          <div className="flex items-end gap-2 justify-center">
+            {/* P2 active */}
+            {p2.active
+              ? <InPlayCard pokemon={p2.active} isActive small onClick={() => setPreview({ source: 'opponent', card: p2.active!.card })} />
+              : <EmptySlot label="Active" small />
+            }
+            <div className="w-px self-stretch bg-green-800/60 mx-0.5" />
+            {/* P2 bench */}
+            {p2.bench.map((poke, i) =>
+              poke
+                ? <InPlayCard key={poke.uid} pokemon={poke} small onClick={() => setPreview({ source: 'opponent', card: poke.card })} />
+                : <EmptySlot key={i} small />
+            )}
+          </div>
         </div>
 
         {/* Log + turn label */}

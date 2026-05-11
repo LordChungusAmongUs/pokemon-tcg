@@ -64,6 +64,18 @@ export function cardImageSrc(card: CardData): string {
   return card.apiImageUrl || '/card-back.png';
 }
 
+// Precomputed map from energy type → image URL using real card images
+export const ENERGY_IMAGE_MAP: Partial<Record<EnergyType, string>> = (() => {
+  const map: Partial<Record<EnergyType, string>> = {};
+  for (const card of ALL_CARDS) {
+    if (card.supertype === 'Energy' && card.rarity === '' && card.localImagePath && card.types.length > 0) {
+      const type = card.types[0];
+      if (!map[type]) map[type] = cardImageSrc(card);
+    }
+  }
+  return map;
+})();
+
 export function isPokemon(card: CardData): boolean {
   return card.supertype === 'Pokémon';
 }

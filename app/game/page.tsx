@@ -226,7 +226,7 @@ export default function GamePage() {
     p1.bench.some(b => b !== null);
 
   return (
-    <div className="h-screen overflow-hidden bg-green-950 text-white flex flex-col select-none">
+    <div className="h-dvh overflow-hidden bg-green-950 text-white flex flex-col select-none">
       {/* Pass modal */}
       {passModal && game.mode === 'local-2p' && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
@@ -256,109 +256,108 @@ export default function GamePage() {
 
       {detailCard && <CardDetail card={detailCard} onClose={() => setDetailCard(null)} />}
 
-      {/* ── P2 side (rotated) ─────────────────────────────── */}
-      <div className="flex-none bg-green-900/50 rotate-180 px-2 pt-1 pb-0">
-        <div className="rotate-180">
-          <div className="flex items-center justify-between mb-1 text-xs text-gray-300">
-            <span className="font-bold text-yellow-300 truncate max-w-24">{p2.name}</span>
-            <div className="flex gap-2">
-              <span>✋{p2.hand.length}</span>
-              <span>🎴{p2.deck.length}</span>
-              <span>🏆{p2.prizes.length}</span>
-              {aiRunning && <span className="text-yellow-400 animate-pulse">thinking…</span>}
-            </div>
+      {/* ── Opponent (P2) — compact strip ────────────────── */}
+      <div className="flex-none bg-green-900/50 px-2 py-1">
+        <div className="flex items-center justify-between text-xs text-gray-300 mb-1">
+          <span className="font-bold text-yellow-300 truncate max-w-24">{p2.name}</span>
+          <div className="flex gap-2">
+            <span>✋{p2.hand.length}</span>
+            <span>🎴{p2.deck.length}</span>
+            <span>🏆{p2.prizes.length}</span>
+            {aiRunning && <span className="text-yellow-400 animate-pulse">thinking…</span>}
           </div>
-          {/* P2 bench */}
-          <div className="flex gap-1 justify-center mb-1">
-            {p2.bench.map((poke, i) =>
-              poke ? <InPlayCard key={poke.uid} pokemon={poke} small onClick={() => setDetailCard(poke.card)} />
-                   : <EmptySlot key={i} small />
-            )}
-          </div>
+        </div>
+        <div className="flex gap-2 justify-center items-end">
           {/* P2 active */}
-          <div className="flex justify-center">
-            {p2.active
-              ? <InPlayCard pokemon={p2.active} isActive small onClick={() => setDetailCard(p2.active!.card)} />
-              : <EmptySlot label="Active" small />
-            }
-          </div>
-        </div>
-      </div>
-
-      {/* ── Divider + log ─────────────────────────────────── */}
-      <div className="flex-none px-2 py-1">
-        <div className="flex items-center gap-2">
-          <div className="flex-none text-xs text-gray-400 whitespace-nowrap">
-            {isP1Turn ? `${p1.name}'s turn` : `${p2.name}'s turn`}
-          </div>
-          <GameLog entries={game.log.slice(-12)} className="flex-1" />
-        </div>
-      </div>
-
-      {/* ── P1 active ─────────────────────────────────────── */}
-      <div className="flex-none flex flex-col items-center gap-1 py-1">
-        {p1.active ? (
-          <>
-            <InPlayCard
-              pokemon={p1.active}
-              isActive
-              small
-              onClick={() => {
-                if (isEnergySelected && selectedHandUid) attachEnergyAction(selectedHandUid, p1.active!.uid);
-                else if (isEvoSelected && selectedHandUid) evolveAction(selectedHandUid, p1.active!.uid);
-                else setDetailCard(p1.active!.card);
-              }}
-            />
-            {/* Attacks */}
-            {isP1Turn && !p1.hasAttackedThisTurn && (
-              <div className="flex gap-1 flex-wrap justify-center">
-                {p1.active.card.attacks.map((atk, i) => {
-                  const can = canPayCost(atk.cost, p1.active!.attachedEnergy);
-                  return (
-                    <button key={i} disabled={!can} onClick={() => attackAction(i)}
-                      className={`text-xs px-2 py-0.5 rounded ${can ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}>
-                      {atk.name} {atk.damageStr || (atk.damage ? `${atk.damage}` : '')}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        ) : (
-          <EmptySlot label="No Active" small />
-        )}
-      </div>
-
-      {/* ── P1 bench ──────────────────────────────────────── */}
-      <div className="flex-none bg-green-900/40 px-2 py-1">
-        <div className="flex gap-1 justify-center">
-          {p1.bench.map((poke, i) =>
-            poke ? (
-              <div key={poke.uid} className="flex flex-col items-center gap-0.5">
-                <InPlayCard pokemon={poke} small
-                  selected={isEnergySelected || isEvoSelected}
-                  onClick={() => handleBenchClick('player1', i)} />
-                {isP1Turn && canRetreat && (
-                  <button onClick={() => retreatAction(i)}
-                    className="text-[10px] px-1 py-0.5 bg-blue-700 hover:bg-blue-600 rounded leading-tight">
-                    Swap
-                  </button>
-                )}
-              </div>
-            ) : (
-              <EmptySlot key={i} small
-                highlight={isBasicSelected && isP1Turn}
-                onClick={() => isBasicSelected && selectedHandUid && playBasic(selectedHandUid, i)} />
-            )
+          {p2.active
+            ? <InPlayCard pokemon={p2.active} isActive small onClick={() => setDetailCard(p2.active!.card)} />
+            : <EmptySlot label="Active" small />
+          }
+          <div className="h-px w-px" />
+          {/* P2 bench */}
+          {p2.bench.map((poke, i) =>
+            poke ? <InPlayCard key={poke.uid} pokemon={poke} small onClick={() => setDetailCard(poke.card)} />
+                 : <EmptySlot key={i} small />
           )}
         </div>
       </div>
 
+      {/* ── Log + turn label ──────────────────────────────── */}
+      <div className="flex-none px-2 py-0.5">
+        <div className="flex items-center gap-2">
+          <div className="flex-none text-xs text-gray-400 whitespace-nowrap">
+            {isP1Turn ? `${p1.name}'s turn` : `${p2.name}'s turn`}
+          </div>
+          <GameLog entries={game.log.slice(-8)} className="flex-1" />
+        </div>
+      </div>
+
+      {/* ── P1 board: active + bench side-by-side ─────────── */}
+      <div className="flex-none flex gap-2 px-2 py-1 justify-center items-start">
+        {/* Active + attacks */}
+        <div className="flex flex-col items-center gap-0.5">
+          {p1.active ? (
+            <>
+              <InPlayCard
+                pokemon={p1.active}
+                isActive
+                small
+                onClick={() => {
+                  if (isEnergySelected && selectedHandUid) attachEnergyAction(selectedHandUid, p1.active!.uid);
+                  else if (isEvoSelected && selectedHandUid) evolveAction(selectedHandUid, p1.active!.uid);
+                  else setDetailCard(p1.active!.card);
+                }}
+              />
+              {isP1Turn && !p1.hasAttackedThisTurn && (
+                <div className="flex gap-1 flex-wrap justify-center mt-0.5">
+                  {p1.active.card.attacks.map((atk, i) => {
+                    const can = canPayCost(atk.cost, p1.active!.attachedEnergy);
+                    return (
+                      <button key={i} disabled={!can} onClick={() => attackAction(i)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded ${can ? 'bg-red-600 hover:bg-red-500' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}>
+                        {atk.name} {atk.damageStr || (atk.damage ? `${atk.damage}` : '')}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            <EmptySlot label="Active" small />
+          )}
+        </div>
+
+        {/* Bench */}
+        <div className="flex flex-col gap-0.5">
+          <div className="flex gap-1">
+            {p1.bench.map((poke, i) =>
+              poke ? (
+                <div key={poke.uid} className="flex flex-col items-center gap-0.5">
+                  <InPlayCard pokemon={poke} small
+                    selected={isEnergySelected || isEvoSelected}
+                    onClick={() => handleBenchClick('player1', i)} />
+                  {isP1Turn && canRetreat && (
+                    <button onClick={() => retreatAction(i)}
+                      className="text-[9px] px-1 py-0.5 bg-blue-700 hover:bg-blue-600 rounded leading-none">
+                      Swap
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <EmptySlot key={i} small
+                  highlight={isBasicSelected && isP1Turn}
+                  onClick={() => isBasicSelected && selectedHandUid && playBasic(selectedHandUid, i)} />
+              )
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* ── Phase controls ────────────────────────────────── */}
-      <div className="flex-none flex items-center justify-between px-2 py-1">
+      <div className="flex-none flex items-center justify-between px-3 py-1 bg-green-900/30">
         <div className="flex gap-2 items-center text-xs text-gray-300">
           <span className="font-bold text-yellow-300 truncate max-w-20">{p1.name}</span>
-          <CardBack small count={p1.prizes.length} className="w-7 h-9 text-xs" />
+          <CardBack small count={p1.prizes.length} className="w-6 h-8 text-xs" />
           <span>🎴{p1.deck.length}</span>
         </div>
         {isP1Turn && game.phase !== 'gameover' && (
@@ -369,7 +368,7 @@ export default function GamePage() {
                 Draw
               </button>
             )}
-            {game.phase === 'main' && (
+            {(game.phase === 'main' || game.phase === 'attack') && (
               <button onClick={endTurnAction}
                 className="px-3 py-1 bg-orange-600 hover:bg-orange-500 rounded text-sm font-medium">
                 End Turn
@@ -381,7 +380,7 @@ export default function GamePage() {
       </div>
 
       {/* ── P1 Hand ───────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 bg-black/40 px-2 pt-1 pb-2 overflow-hidden">
+      <div className="flex-1 min-h-[96px] bg-black/40 px-2 pt-1 pb-2 overflow-y-hidden overflow-x-auto">
         {selectedCard && (
           <p className="text-[10px] text-yellow-300 mb-0.5 leading-tight">
             {selectedCard.card.name}: {
@@ -391,7 +390,7 @@ export default function GamePage() {
             }
           </p>
         )}
-        <div className="flex gap-1 overflow-x-auto h-full items-end pb-1">
+        <div className="flex gap-1 h-full items-end pb-1">
           {activePlayer.hand.map(c => (
             <div key={c.uid} className="flex-shrink-0 flex flex-col items-center gap-0.5">
               <CardImage

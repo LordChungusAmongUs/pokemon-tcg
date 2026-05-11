@@ -1,6 +1,6 @@
 'use client';
 import type { InPlayPokemon } from '@/engine/GameState';
-import { cardImageSrc, typeEmoji } from '@/lib/cardUtils';
+import { cardImageSrc, typeEmoji, ENERGY_IMAGE_MAP } from '@/lib/cardUtils';
 import Image from 'next/image';
 
 interface Props {
@@ -26,6 +26,7 @@ export default function InPlayCard({ pokemon, onClick, selected, isActive, small
   const barColor = pct > 50 ? 'bg-green-500' : pct > 25 ? 'bg-yellow-400' : 'bg-red-500';
 
   const cardW = small ? 'w-14 h-20' : 'w-20 h-28';
+  const barW  = small ? 'w-14' : 'w-20';
 
   return (
     <div
@@ -53,32 +54,48 @@ export default function InPlayCard({ pokemon, onClick, selected, isActive, small
       </div>
 
       {/* HP bar */}
-      <div className="w-20 bg-gray-700 rounded-full h-1.5">
+      <div className={`${barW} bg-gray-700 rounded-full h-1.5`}>
         <div className={`${barColor} h-1.5 rounded-full transition-all`} style={{ width: `${pct}%` }} />
       </div>
 
       {/* HP text + status */}
-      <div className="flex items-center gap-1 text-xs text-white">
-        <span>{remaining}/{hp} HP</span>
+      <div className="flex items-center gap-0.5 text-[10px] text-white leading-none">
+        <span>{remaining}/{hp}</span>
         {pokemon.statusCondition && (
-          <span className={`${STATUS_COLORS[pokemon.statusCondition]} px-1 rounded text-white text-[10px]`}>
+          <span className={`${STATUS_COLORS[pokemon.statusCondition]} px-1 rounded text-white text-[9px]`}>
             {pokemon.statusCondition.slice(0, 3)}
           </span>
         )}
       </div>
 
-      {/* Energy dots */}
-      <div className="flex flex-wrap gap-0.5 justify-center max-w-[80px]">
-        {pokemon.attachedEnergy.map(e => (
-          <span
-            key={e.uid}
-            title={e.type}
-            className="text-[10px]"
-          >
-            {typeEmoji(e.type)}
-          </span>
-        ))}
-      </div>
+      {/* Energy stack */}
+      {pokemon.attachedEnergy.length > 0 && (() => {
+        const energies = pokemon.attachedEnergy;
+        const cardH = small ? 26 : 36;
+        const cardW = small ? 18 : 26;
+        const offset = small ? 10 : 14;
+        const totalW = cardW + (energies.length - 1) * offset;
+        return (
+          <div className="relative" style={{ width: totalW, height: cardH }}>
+            {energies.map((e, idx) => {
+              const imgSrc = ENERGY_IMAGE_MAP[e.type];
+              return (
+                <div
+                  key={e.uid}
+                  title={e.type}
+                  className="absolute rounded overflow-hidden shadow border border-white/20"
+                  style={{ left: idx * offset, width: cardW, height: cardH, zIndex: idx }}
+                >
+                  {imgSrc
+                    ? <Image src={imgSrc} alt={e.type} fill className="object-cover" unoptimized sizes="26px" />
+                    : <div className="w-full h-full flex items-center justify-center bg-gray-700 text-[8px]">{typeEmoji(e.type)}</div>
+                  }
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -93,6 +93,7 @@ export interface PlayerState {
   energyPlayedThisTurn: boolean;
   retreatedThisTurn: boolean;
   hasAttackedThisTurn: boolean;
+  attackDamageBonus: number;        // from PlusPower; added after W/R; reset end of turn
 }
 
 export interface GameState {

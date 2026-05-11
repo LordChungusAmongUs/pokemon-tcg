@@ -5,6 +5,7 @@ import type {
 import { calculateDamage, applyPoisonDamage, applyBurnDamage, isKnockedOut } from './damage';
 import { checkWinConditions, checkDeckOut } from './winConditions';
 import { makeUID, makeCardInstance, canPayCost, isPokemon, isBasicPokemon } from '@/lib/cardUtils';
+import { computeAttackEffects, handleTrainerEffect, flip } from './cardEffects';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -31,10 +32,11 @@ function makePlayer(id: 'player1' | 'player2', name: string, deckCards: CardData
     energyPlayedThisTurn: false,
     retreatedThisTurn: false,
     hasAttackedThisTurn: false,
+    attackDamageBonus: 0,
   };
 }
 
-function inPlayPokemon(card: CardData, turn: number): InPlayPokemon {
+export function inPlayPokemon(card: CardData, turn: number): InPlayPokemon {
   return {
     uid: makeUID(),
     card,
@@ -45,6 +47,16 @@ function inPlayPokemon(card: CardData, turn: number): InPlayPokemon {
     turnPlayed: turn,
     isFirstTurn: false,
   };
+}
+
+function fakeEnergyCard(type: EnergyType, cardId: string): CardInstance {
+  return makeCardInstance({
+    id: cardId, name: `${type} Energy`, set: 'Basic', setCode: 'basic',
+    number: '0', rarity: '', supertype: 'Energy', subtype: 'Basic',
+    evolvesFrom: null, hp: null, types: [type], attacks: [], abilities: [],
+    weaknesses: [], resistances: [], retreatCost: [], rules: [],
+    localImagePath: null, apiImageUrl: null,
+  });
 }
 
 // ─── init ────────────────────────────────────────────────────────────────────
@@ -63,11 +75,9 @@ function hasBasicInHand(player: PlayerState): boolean {
 }
 
 function finishSetup(state: GameState): GameState {
-  // Deal 6 prize cards to each player
   const p1 = { ...state.player1, prizes: state.player1.deck.slice(0, 6), deck: state.player1.deck.slice(6) };
   const p2 = { ...state.player2, prizes: state.player2.deck.slice(0, 6), deck: state.player2.deck.slice(6) };
 
-  // Coin flip for who goes first
   const p1First = Math.random() < 0.5;
   const firstPlayer: 'player1' | 'player2' = p1First ? 'player1' : 'player2';
   const firstName = p1First ? state.player1.name : state.player2.name;
@@ -78,7 +88,7 @@ function finishSetup(state: GameState): GameState {
     player2: p2,
     setupStep: undefined,
     activePlayer: firstPlayer,
-    phase: 'main', // first player skips draw on turn 1
+    phase: 'main',
     turn: 1,
   }, `🪙 Coin flip: ${firstName} goes first!`);
 }
@@ -110,7 +120,6 @@ export function initGame(
   let p1 = makePlayer('player1', p1Name, p1Deck);
   let p2 = makePlayer('player2', p2Name, p2Deck);
 
-  // Deal 7 cards each, mulligan until each player has at least one basic
   let p1Mulligans = 0;
   p1 = dealHand(p1);
   while (!hasBasicInHand(p1) && p1Mulligans < 20) {
@@ -125,7 +134,6 @@ export function initGame(
     p2Mulligans++;
   }
 
-  // Opponent draws 1 extra card per mulligan
   for (let i = 0; i < p2Mulligans && p1.deck.length > 0; i++) {
     p1 = { ...p1, hand: [...p1.hand, p1.deck[0]], deck: p1.deck.slice(1) };
   }
@@ -166,11 +174,9 @@ export function confirmSetup(
   const activeCard = player.hand.find(c => c.uid === activeHandUid);
   if (!activeCard || !isBasicPokemon(activeCard.card)) return state;
 
-  // Place active (turnPlayed=0 so they can evolve from turn 1 onward)
   const active = inPlayPokemon(activeCard.card, 0);
   let newHand = player.hand.filter(c => c.uid !== activeHandUid);
 
-  // Place bench
   const newBench: (InPlayPokemon | null)[] = [null, null, null, null, null];
   let slot = 0;
   for (const uid of benchHandUids) {
@@ -267,11 +273,20 @@ export function attachEnergy(
   if (!energyCard || energyCard.card.supertype !== 'Energy') return state;
 
   const energyType: EnergyType = (energyCard.card.types[0] as EnergyType) || 'Colorless';
-  const energyInst: EnergyInstance = { uid: makeUID(), type: energyType, cardId: energyCard.card.id };
+
+  // Double Colorless Energy (base1-96) provides 2 Colorless energy instances
+  const isDCE = energyCard.card.id === 'base1-96' ||
+    energyCard.card.name.toLowerCase().includes('double colorless');
+  const energyInstances: EnergyInstance[] = isDCE
+    ? [
+        { uid: makeUID(), type: 'Colorless', cardId: energyCard.card.id },
+        { uid: makeUID(), type: 'Colorless', cardId: energyCard.card.id },
+      ]
+    : [{ uid: makeUID(), type: energyType, cardId: energyCard.card.id }];
 
   const attachTo = (pokemon: InPlayPokemon | null): InPlayPokemon | null => {
     if (!pokemon || pokemon.uid !== targetUid) return pokemon;
-    return { ...pokemon, attachedEnergy: [...pokemon.attachedEnergy, energyInst] };
+    return { ...pokemon, attachedEnergy: [...pokemon.attachedEnergy, ...energyInstances] };
   };
 
   const newActive = attachTo(player.active);
@@ -280,7 +295,7 @@ export function attachEnergy(
     newBench.find(b => b?.uid === targetUid)?.card.name) ?? 'Pokemon';
 
   if (newActive === player.active && newBench.every((b, i) => b === player.bench[i])) {
-    return state; // nothing attached
+    return state;
   }
 
   const newHand = player.hand.filter(c => c.uid !== energyHandUid);
@@ -291,7 +306,8 @@ export function attachEnergy(
     bench: newBench,
     energyPlayedThisTurn: true,
   };
-  return log({ ...state, [active]: updated }, `${player.name} attaches ${energyType} Energy to ${targetName}.`);
+  const energyLabel = isDCE ? 'Double Colorless Energy (2×Colorless)' : `${energyType} Energy`;
+  return log({ ...state, [active]: updated }, `${player.name} attaches ${energyLabel} to ${targetName}.`);
 }
 
 // ─── retreat ─────────────────────────────────────────────────────────────────
@@ -309,7 +325,6 @@ export function retreat(state: GameState, benchSlot: number): GameState {
   const swapTo = player.bench[benchSlot];
   if (!swapTo) return state;
 
-  // Discard retreat cost energy
   const energyToDiscard = player.active.attachedEnergy.slice(-cost);
   const remainingEnergy = player.active.attachedEnergy.slice(0, totalEnergy - cost);
   const retreatedPokemon = { ...player.active, attachedEnergy: remainingEnergy };
@@ -317,13 +332,7 @@ export function retreat(state: GameState, benchSlot: number): GameState {
   const newBench = [...player.bench];
   newBench[benchSlot] = retreatedPokemon;
 
-  const discardedCards: CardInstance[] = energyToDiscard.map(e => ({
-    uid: e.uid,
-    card: { id: e.cardId, name: `${e.type} Energy`, set: 'Basic', setCode: 'basic', number: '0',
-      rarity: 'Common', supertype: 'Energy', subtype: 'Basic', evolvesFrom: null, hp: null,
-      types: [e.type], attacks: [], abilities: [], weaknesses: [], resistances: [], retreatCost: [],
-      rules: [], localImagePath: null, apiImageUrl: null },
-  }));
+  const discardedCards: CardInstance[] = energyToDiscard.map(e => fakeEnergyCard(e.type, e.cardId));
 
   const updated = {
     ...player,
@@ -334,94 +343,6 @@ export function retreat(state: GameState, benchSlot: number): GameState {
   };
   return log({ ...state, [active]: updated },
     `${player.name} retreats ${retreatedPokemon.card.name}, sends out ${swapTo.card.name}.`);
-}
-
-// ─── attack ──────────────────────────────────────────────────────────────────
-
-export function flipCoin(): boolean {
-  return Math.random() < 0.5;
-}
-
-export function attack(state: GameState, attackIndex: number): GameState {
-  const active = state.activePlayer;
-  const opponent = active === 'player1' ? 'player2' : 'player1';
-  const attacker = state[active];
-  const defender = state[opponent];
-
-  if (!attacker.active || !defender.active) return state;
-  if (attacker.hasAttackedThisTurn) return state;
-
-  const atk = attacker.active.card.attacks[attackIndex];
-  if (!atk) return state;
-
-  if (!canPayCost(atk.cost, attacker.active.attachedEnergy)) return state;
-
-  // Check paralysis
-  if (attacker.active.statusCondition === 'Paralyzed') {
-    const cleared = { ...attacker.active, statusCondition: null };
-    return log(
-      { ...state, [active]: { ...attacker, active: cleared, hasAttackedThisTurn: true } },
-      `${attacker.active.card.name} is Paralyzed and can't attack! The Paralysis fades.`,
-    );
-  }
-
-  // Check confusion — coin flip
-  if (attacker.active.statusCondition === 'Confused') {
-    const heads = flipCoin();
-    if (!heads) {
-      const selfDamaged = { ...attacker.active, damageTaken: attacker.active.damageTaken + 30 };
-      let next = log(
-        { ...state, [active]: { ...attacker, active: selfDamaged, hasAttackedThisTurn: true } },
-        `${attacker.active.card.name} is Confused! Coin flip tails — hits itself for 30!`,
-      );
-      next = resolveKO(next, active, null);
-      return checkWinConditions(next);
-    }
-  }
-
-  // Coin flip for attack effects
-  let coinResult: boolean | null = null;
-  const needsCoin = atk.text.toLowerCase().includes('flip a coin');
-  if (needsCoin) {
-    coinResult = flipCoin();
-  }
-
-  let damage = calculateDamage(attacker.active.card.types, atk, defender.active);
-
-  // Handle "+X more damage on heads" patterns
-  if (coinResult === true && atk.text.match(/heads.*(\d+)\s*more damage/i)) {
-    const extra = parseInt(atk.text.match(/heads.*?(\d+)\s*more damage/i)![1]);
-    damage += extra;
-  }
-  if (coinResult === false && atk.text.match(/tails.*no damage|tails.*fails/i)) {
-    damage = 0;
-  }
-
-  let msg = `${attacker.active.card.name} uses ${atk.name}`;
-  if (damage > 0) msg += ` for ${damage} damage`;
-  if (needsCoin) msg += ` (coin flip: ${coinResult ? 'heads' : 'tails'})`;
-  msg += '!';
-
-  // Apply status effects from attack text
-  let newDefenderActive = { ...defender.active, damageTaken: defender.active.damageTaken + damage };
-
-  if (atk.text.toLowerCase().includes('sleep')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Asleep' };
-  else if (atk.text.toLowerCase().includes('paralyz')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Paralyzed' };
-  else if (atk.text.toLowerCase().includes('poison')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Poisoned' };
-  else if (atk.text.toLowerCase().includes('confus')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Confused' };
-  else if (atk.text.toLowerCase().includes('burn')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Burned' };
-
-  let next = log(
-    {
-      ...state,
-      [active]: { ...attacker, hasAttackedThisTurn: true },
-      [opponent]: { ...defender, active: newDefenderActive },
-    },
-    msg,
-  );
-
-  next = resolveKO(next, opponent, active);
-  return checkWinConditions(next);
 }
 
 // ─── KO resolution ───────────────────────────────────────────────────────────
@@ -437,28 +358,19 @@ function resolveKO(
   const hp = player.active.card.hp ?? 0;
   if (player.active.damageTaken < hp) return state;
 
-  // Move KO'd pokemon + attached energy to discard
   const discarded: CardInstance[] = [
     makeCardInstance(player.active.card),
-    ...player.active.attachedEnergy.map(e => makeCardInstance({
-      id: e.cardId, name: `${e.type} Energy`, set: 'Basic', setCode: 'basic',
-      number: '0', rarity: 'Common', supertype: 'Energy', subtype: 'Basic',
-      evolvesFrom: null, hp: null, types: [e.type], attacks: [], abilities: [],
-      weaknesses: [], resistances: [], retreatCost: [], rules: [],
-      localImagePath: null, apiImageUrl: null,
-    })),
+    ...player.active.attachedEnergy.map(e => fakeEnergyCard(e.type, e.cardId)),
   ];
 
   let newPlayer = { ...player, active: null, discard: [...player.discard, ...discarded] };
   let next = log({ ...state, [knockedSide]: newPlayer }, `${player.active.card.name} is knocked out!`);
 
-  // Prize card to winner
   if (prizeTaker && state[prizeTaker].prizes.length > 0) {
     const taker = next[prizeTaker];
     const [prize, ...remainingPrizes] = taker.prizes;
-    const newHand = [...taker.hand, prize];
     next = log(
-      { ...next, [prizeTaker]: { ...taker, prizes: remainingPrizes, hand: newHand } },
+      { ...next, [prizeTaker]: { ...taker, prizes: remainingPrizes, hand: [...taker.hand, prize] } },
       `${taker.name} takes a prize card! (${remainingPrizes.length} left)`,
     );
   }
@@ -472,7 +384,6 @@ function resolveKO(
     newBench[firstBench] = null;
     const allOthers = newBench.every(b => b === null);
     if (allOthers) {
-      // Only one Pokemon left — auto-promote
       next = log(
         { ...next, [knockedSide]: { ...updatedKnocked, active: promoted, bench: newBench } },
         `${promoted.card.name} is promoted to Active!`,
@@ -483,6 +394,239 @@ function resolveKO(
   return next;
 }
 
+// ─── attack ──────────────────────────────────────────────────────────────────
+
+export function flipCoin(): boolean { return flip(); }
+
+export function attack(state: GameState, attackIndex: number): GameState {
+  const active = state.activePlayer;
+  const opponent = active === 'player1' ? 'player2' : 'player1';
+  const attacker = state[active];
+  const defender = state[opponent];
+
+  if (!attacker.active || !defender.active) return state;
+  if (attacker.hasAttackedThisTurn) return state;
+
+  const atk = attacker.active.card.attacks[attackIndex];
+  if (!atk) return state;
+  if (!canPayCost(atk.cost, attacker.active.attachedEnergy)) return state;
+
+  // ── Paralysis check ──────────────────────────────────────────────────────
+  if (attacker.active.statusCondition === 'Paralyzed') {
+    const cleared = { ...attacker.active, statusCondition: null };
+    return log(
+      { ...state, [active]: { ...attacker, active: cleared, hasAttackedThisTurn: true } },
+      `${attacker.active.card.name} is Paralyzed and can't attack! The Paralysis fades.`,
+    );
+  }
+
+  // ── Confusion check ──────────────────────────────────────────────────────
+  if (attacker.active.statusCondition === 'Confused') {
+    const heads = flip();
+    if (!heads) {
+      const selfDamaged = { ...attacker.active, damageTaken: attacker.active.damageTaken + 30 };
+      let next = log(
+        { ...state, [active]: { ...attacker, active: selfDamaged, hasAttackedThisTurn: true } },
+        `${attacker.active.card.name} is Confused! Coin flip tails — hits itself for 30!`,
+      );
+      next = resolveKO(next, active, null);
+      return checkWinConditions(next);
+    }
+  }
+
+  // ── Compute all attack effects ───────────────────────────────────────────
+  const attackerBenchCount = attacker.bench.filter(b => b !== null).length;
+  const fx = computeAttackEffects(atk, attacker.active, defender.active, attackerBenchCount);
+
+  // ── Calculate damage ─────────────────────────────────────────────────────
+  const rawDamage = fx.rawDamage;
+  let damage = calculateDamage(attacker.active.card.types, atk, defender.active, rawDamage);
+  // PlusPower bonus (added after W/R)
+  damage += attacker.attackDamageBonus;
+  // Flat bonus from card effects (also after W/R conceptually — bench count, energy count)
+  damage += fx.bonusDamage;
+  damage = Math.max(0, damage);
+
+  // ── Build log message ────────────────────────────────────────────────────
+  let msg = `${attacker.active.card.name} uses ${atk.name}`;
+  if (damage > 0) msg += ` for ${damage} damage`;
+  if (fx.coinMsg) msg += ` ${fx.coinMsg}`;
+  msg += '!';
+
+  // ── Apply damage to defender ─────────────────────────────────────────────
+  let newDefenderActive = { ...defender.active, damageTaken: defender.active.damageTaken + damage };
+
+  // ── Status condition on defender ─────────────────────────────────────────
+  if (fx.defenderStatus !== false) {
+    // cardEffects gave us a resolved status (accounts for coin flips)
+    if (fx.defenderStatus !== null) {
+      newDefenderActive = { ...newDefenderActive, statusCondition: fx.defenderStatus };
+    }
+  } else {
+    // Fall back to text parsing (for cases not handled by computeAttackEffects)
+    const text = atk.text?.toLowerCase() ?? '';
+    if (!text.includes('flip a coin')) {
+      if (text.includes('asleep')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Asleep' };
+      else if (text.includes('paralyz')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Paralyzed' };
+      else if (text.includes('poison')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Poisoned' };
+      else if (text.includes('confus') && !text.includes(attacker.active.card.name.toLowerCase())) {
+        newDefenderActive = { ...newDefenderActive, statusCondition: 'Confused' };
+      } else if (text.includes('burn')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Burned' };
+    }
+  }
+
+  let next: GameState = log(
+    {
+      ...state,
+      [active]: { ...attacker, hasAttackedThisTurn: true, attackDamageBonus: 0 },
+      [opponent]: { ...defender, active: newDefenderActive },
+    },
+    msg,
+  );
+
+  // ── Self-confusion (Vileplume Petal Dance) ───────────────────────────────
+  if (fx.selfStatus) {
+    const p = next[active];
+    if (p.active) {
+      next = log({ ...next, [active]: { ...p, active: { ...p.active, statusCondition: fx.selfStatus } } },
+        `${p.active.card.name} is now ${fx.selfStatus}!`);
+    }
+  }
+
+  // ── Recoil damage ────────────────────────────────────────────────────────
+  if (fx.recoil > 0) {
+    const p = next[active];
+    if (p.active) {
+      next = log({ ...next, [active]: { ...p, active: { ...p.active, damageTaken: p.active.damageTaken + fx.recoil } } },
+        `${p.active.card.name} takes ${fx.recoil} recoil damage!`);
+    }
+  }
+
+  // ── Self-KO (Selfdestruct, Explosion) ───────────────────────────────────
+  if (fx.selfKO) {
+    const p = next[active];
+    if (p.active) {
+      const hp = p.active.card.hp ?? 1;
+      next = { ...next, [active]: { ...p, active: { ...p.active, damageTaken: hp } } };
+    }
+  }
+
+  // ── Opponent bench damage ────────────────────────────────────────────────
+  if (fx.opponentBenchDmg > 0) {
+    const o = next[opponent];
+    const newBench = o.bench.map(b =>
+      b ? { ...b, damageTaken: b.damageTaken + fx.opponentBenchDmg } : null,
+    ) as (InPlayPokemon | null)[];
+    next = log({ ...next, [opponent]: { ...o, bench: newBench } },
+      `${fx.opponentBenchDmg} damage dealt to each of ${o.name}'s bench!`);
+  }
+
+  // ── Own bench damage ─────────────────────────────────────────────────────
+  if (fx.ownBenchDmg > 0) {
+    const p = next[active];
+    const newBench = p.bench.map(b =>
+      b ? { ...b, damageTaken: b.damageTaken + fx.ownBenchDmg } : null,
+    ) as (InPlayPokemon | null)[];
+    next = log({ ...next, [active]: { ...p, bench: newBench } },
+      `${fx.ownBenchDmg} damage dealt to each of ${p.name}'s bench!`);
+  }
+
+  // ── Discard attacker's energy ────────────────────────────────────────────
+  if (fx.discardAllAttackerEnergy || fx.discardAttackerEnergy > 0) {
+    const p = next[active];
+    if (p.active) {
+      const count = fx.discardAllAttackerEnergy
+        ? p.active.attachedEnergy.length
+        : Math.min(fx.discardAttackerEnergy, p.active.attachedEnergy.length);
+      const discarded = p.active.attachedEnergy.slice(-count);
+      const remaining = p.active.attachedEnergy.slice(0, p.active.attachedEnergy.length - count);
+      const discardCards = discarded.map(e => fakeEnergyCard(e.type, e.cardId));
+      next = log({
+        ...next,
+        [active]: {
+          ...p,
+          active: { ...p.active, attachedEnergy: remaining },
+          discard: [...p.discard, ...discardCards],
+        },
+      }, `${count} energy discarded from ${p.active.card.name}.`);
+    }
+  }
+
+  // ── Discard opponent's energy (Whirlpool) ────────────────────────────────
+  if (fx.discardOpponentEnergy > 0) {
+    const o = next[opponent];
+    if (o.active && o.active.attachedEnergy.length > 0) {
+      const [removed, ...rest] = o.active.attachedEnergy;
+      next = log({
+        ...next,
+        [opponent]: { ...o, active: { ...o.active, attachedEnergy: rest } },
+      }, `${removed.type} Energy discarded from ${o.active.card.name}!`);
+    }
+  }
+
+  // ── Force opponent switch (Ninetales Lure, Victreebel Lure) ─────────────
+  if (fx.forceOpponentSwitch) {
+    const o = next[opponent];
+    const benchIdx = o.bench.findIndex(b => b !== null);
+    if (o.active && benchIdx >= 0) {
+      const swapIn = o.bench[benchIdx]!;
+      const newBench = [...o.bench];
+      newBench[benchIdx] = o.active;
+      next = log({ ...next, [opponent]: { ...o, active: swapIn, bench: newBench } },
+        `${o.active.card.name} is switched out for ${swapIn.card.name}!`);
+    }
+  }
+
+  // ── Return defender to hand (Pidgeot Hurricane) ──────────────────────────
+  if (fx.returnDefender) {
+    const o = next[opponent];
+    if (o.active && o.active.damageTaken < (o.active.card.hp ?? 999)) {
+      const returned = makeCardInstance(o.active.card);
+      next = log({ ...next, [opponent]: { ...o, active: null, hand: [...o.hand, returned] } },
+        `${o.active.card.name} and all attached cards return to ${o.name}'s hand!`);
+    }
+  }
+
+  // ── Draw cards (Kangaskhan Fetch) ────────────────────────────────────────
+  if (fx.drawCards > 0) {
+    for (let i = 0; i < fx.drawCards; i++) next = drawCard(next, active);
+    next = log(next, `${attacker.name} draws ${fx.drawCards} card(s).`);
+  }
+
+  // ── Resolve KOs ──────────────────────────────────────────────────────────
+  // Check opponent active KO
+  next = resolveKO(next, opponent, active);
+  // Check self-KO (recoil, Selfdestruct)
+  if (fx.recoil > 0 || fx.selfKO) next = resolveKO(next, active, null);
+  // Check bench KOs
+  if (fx.opponentBenchDmg > 0) {
+    const o = next[opponent];
+    o.bench.forEach((b, i) => {
+      if (b && isKnockedOut(b)) {
+        const newBench = [...next[opponent].bench];
+        const discardCards = [makeCardInstance(b.card), ...b.attachedEnergy.map(e => fakeEnergyCard(e.type, e.cardId))];
+        newBench[i] = null;
+        next = log({ ...next, [opponent]: { ...next[opponent], bench: newBench, discard: [...next[opponent].discard, ...discardCards] } },
+          `${b.card.name} on the bench is knocked out!`);
+      }
+    });
+  }
+  if (fx.ownBenchDmg > 0) {
+    const p = next[active];
+    p.bench.forEach((b, i) => {
+      if (b && isKnockedOut(b)) {
+        const newBench = [...next[active].bench];
+        const discardCards = [makeCardInstance(b.card), ...b.attachedEnergy.map(e => fakeEnergyCard(e.type, e.cardId))];
+        newBench[i] = null;
+        next = log({ ...next, [active]: { ...next[active], bench: newBench, discard: [...next[active].discard, ...discardCards] } },
+          `${b.card.name} on your bench is knocked out!`);
+      }
+    });
+  }
+
+  return checkWinConditions(next);
+}
+
 // ─── end of turn ─────────────────────────────────────────────────────────────
 
 export function endTurn(state: GameState): GameState {
@@ -490,13 +634,11 @@ export function endTurn(state: GameState): GameState {
   const opponent = active === 'player1' ? 'player2' : 'player1';
   const player = state[active];
 
-  // Apply poison/burn end-of-turn effects to active player's Pokemon
   let updatedActive = player.active ? applyPoisonDamage(player.active) : null;
   updatedActive = updatedActive ? applyBurnDamage(updatedActive) : null;
 
-  // Wake up sleeping pokemon (coin flip)
   if (updatedActive?.statusCondition === 'Asleep') {
-    if (flipCoin()) updatedActive = { ...updatedActive, statusCondition: null };
+    if (flip()) updatedActive = { ...updatedActive, statusCondition: null };
   }
 
   let next: GameState = {
@@ -507,6 +649,7 @@ export function endTurn(state: GameState): GameState {
       energyPlayedThisTurn: false,
       retreatedThisTurn: false,
       hasAttackedThisTurn: false,
+      attackDamageBonus: 0, // PlusPower discards at end of turn
     },
     activePlayer: opponent,
     turn: state.turn + 1,
@@ -514,7 +657,6 @@ export function endTurn(state: GameState): GameState {
     log: [...state.log, `--- ${state[opponent].name}'s turn ---`],
   };
 
-  // Check if end-of-turn damage KO'd something
   if (updatedActive && isKnockedOut(updatedActive)) {
     next = resolveKO(next, active, opponent);
   }
@@ -530,6 +672,7 @@ export function playTrainer(state: GameState, handUid: string): GameState {
   const card = player.hand.find(c => c.uid === handUid);
   if (!card || card.card.supertype !== 'Trainer') return state;
 
+  // Remove card from hand and put in discard
   let next: GameState = {
     ...state,
     [active]: {
@@ -540,64 +683,8 @@ export function playTrainer(state: GameState, handUid: string): GameState {
   };
   next = log(next, `${player.name} plays ${card.card.name}.`);
 
-  const name = card.card.name.toLowerCase();
-
-  // Professor Oak / Professor's Research: discard hand, draw 7
-  if (name.includes('professor oak') || name.includes("professor's research")) {
-    const p = next[active];
-    next = { ...next, [active]: { ...p, discard: [...p.discard, ...p.hand], hand: [] } };
-    for (let i = 0; i < 7; i++) next = drawCard(next, active);
-    return log(next, `${player.name} discards their hand and draws 7 cards.`);
-  }
-
-  // Bill / Pokédex: draw 2
-  if (name === 'bill' || name.includes('pokédex')) {
-    next = drawCard(next, active);
-    next = drawCard(next, active);
-    return log(next, `${player.name} draws 2 cards.`);
-  }
-
-  // Potion: heal 20 from active
-  if (name === 'potion') {
-    const p = next[active];
-    if (p.active) {
-      const healed = { ...p.active, damageTaken: Math.max(0, p.active.damageTaken - 20) };
-      next = log({ ...next, [active]: { ...p, active: healed } }, `${player.name} heals 20 from ${p.active.card.name}.`);
-    }
-    return next;
-  }
-
-  // Super Potion: heal 40 from active, discard 1 energy
-  if (name === 'super potion') {
-    const p = next[active];
-    if (p.active && p.active.attachedEnergy.length > 0) {
-      const [discardedE, ...remaining] = p.active.attachedEnergy;
-      const healed = { ...p.active, damageTaken: Math.max(0, p.active.damageTaken - 40), attachedEnergy: remaining };
-      const eCard = makeCardInstance({ id: discardedE.cardId, name: `${discardedE.type} Energy`, set: 'Basic', setCode: 'basic', number: '0',
-        rarity: 'Common', supertype: 'Energy', subtype: 'Basic', evolvesFrom: null, hp: null,
-        types: [discardedE.type], attacks: [], abilities: [], weaknesses: [], resistances: [], retreatCost: [], rules: [],
-        localImagePath: null, apiImageUrl: null });
-      next = log({ ...next, [active]: { ...p, active: healed, discard: [...p.discard, eCard] } },
-        `${player.name} heals 40 from ${p.active.card.name} (discards 1 energy).`);
-    }
-    return next;
-  }
-
-  // Switch: swap active with bench
-  if (name === 'switch') {
-    const p = next[active];
-    const firstBench = p.bench.findIndex(b => b !== null);
-    if (p.active && firstBench >= 0) {
-      const swapTarget = p.bench[firstBench]!;
-      const newBench = [...p.bench];
-      newBench[firstBench] = p.active;
-      next = log({ ...next, [active]: { ...p, active: swapTarget, bench: newBench } },
-        `${player.name} switches ${p.active.card.name} with ${swapTarget.card.name}.`);
-    }
-    return next;
-  }
-
-  return log(next, `(${card.card.name}'s effect is not yet implemented.)`);
+  // Delegate to comprehensive handler
+  return handleTrainerEffect(next, next, active, card, drawCard, inPlayPokemon);
 }
 
 // ─── evolve ──────────────────────────────────────────────────────────────────
@@ -612,7 +699,7 @@ export function evolve(state: GameState, handUid: string, targetUid: string): Ga
   const evolveTarget = (pokemon: InPlayPokemon | null): InPlayPokemon | null => {
     if (!pokemon || pokemon.uid !== targetUid) return pokemon;
     if (pokemon.card.name !== evoCard.card.evolvesFrom) return pokemon;
-    if (pokemon.turnPlayed === state.turn) return pokemon; // can't evolve same turn
+    if (pokemon.turnPlayed === state.turn) return pokemon;
 
     const damageTaken = Math.min(pokemon.damageTaken, (evoCard.card.hp ?? 0) - 1);
     return {

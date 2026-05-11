@@ -4,8 +4,9 @@ export function calculateDamage(
   attackerTypes: EnergyType[],
   attack: CardAttack,
   defender: InPlayPokemon,
+  rawDamage?: number, // override attack.damage (used when coin flips modify base damage)
 ): number {
-  let damage = attack.damage;
+  let damage = rawDamage !== undefined ? rawDamage : attack.damage;
   if (damage === 0) return 0;
 
   const defenderCard = defender.card;

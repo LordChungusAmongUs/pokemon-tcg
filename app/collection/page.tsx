@@ -6,23 +6,33 @@ import CardDetail from '@/components/cards/CardDetail';
 import type { CardData } from '@/engine/GameState';
 import Link from 'next/link';
 import { FORMATS } from '@/lib/formats';
+import { useAuthStore } from '@/store/authStore';
 
 const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl']);
 const PLAYABLE_CARDS = ALL_CARDS.filter(c => !EXCLUDED.has(c.set));
 const SUPERTYPES = ['All', 'Pokémon', 'Trainer', 'Energy'];
 const SETS = ['All', ...Array.from(new Set(PLAYABLE_CARDS.map(c => c.set))).sort()];
 
-export default function CollectionPage() {
+export default function PokedexPage() {
+  const { collection, encountered } = useAuthStore();
   const [search, setSearch] = useState('');
   const [supertype, setSupertype] = useState('All');
   const [set, setSet] = useState('All');
   const [format, setFormat] = useState('');
+  const [tab, setTab] = useState<'owned' | 'seen' | 'all'>('owned');
   const [detail, setDetail] = useState<CardData | null>(null);
 
   const activeFormat = FORMATS.find(f => f.id === format);
   const formatSetNames = activeFormat ? new Set(activeFormat.sets) : null;
 
   const filtered = useMemo(() => PLAYABLE_CARDS.filter(c => {
+    const ownedQty = collection[c.id] ?? 0;
+    const seen = encountered.has(c.id);
+
+    if (tab === 'owned' && ownedQty === 0) return false;
+    if (tab === 'seen' && !seen) return false;
+    if (tab === 'all' && ownedQty === 0 && !seen) return false;
+
     if (supertype !== 'All' && c.supertype !== supertype) return false;
     if (formatSetNames) {
       if (c.set && !formatSetNames.has(c.set)) return false;
@@ -31,7 +41,10 @@ export default function CollectionPage() {
     }
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
-  }), [search, supertype, set, format]);
+  }), [search, supertype, set, format, tab, collection, encountered]);
+
+  const ownedCount = PLAYABLE_CARDS.filter(c => (collection[c.id] ?? 0) > 0).length;
+  const seenCount  = PLAYABLE_CARDS.filter(c => encountered.has(c.id)).length;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -40,9 +53,32 @@ export default function CollectionPage() {
       {/* Header */}
       <div className="sticky top-0 bg-gray-900 border-b border-gray-800 z-10 p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold">Card Collection</h1>
+          <div>
+            <h1 className="text-xl font-bold text-yellow-400">Pokédex</h1>
+            <p className="text-xs text-gray-400">{ownedCount} owned · {seenCount} encountered</p>
+          </div>
           <Link href="/" className="text-sm text-gray-400 hover:text-white">← Home</Link>
         </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2">
+          {([
+            { id: 'owned', label: `Owned (${ownedCount})` },
+            { id: 'seen',  label: `Seen (${seenCount})` },
+            { id: 'all',   label: 'All discovered' },
+          ] as const).map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                tab === t.id ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         <input
           type="text"
           placeholder="Search cards..."
@@ -73,19 +109,52 @@ export default function CollectionPage() {
 
       {/* Grid */}
       <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {filtered.map(card => (
-          <div key={card.id} className="flex flex-col items-center gap-1">
-            <CardImage
-              card={card}
-              onClick={() => setDetail(card)}
-              large
-            />
-            <span className="text-xs text-gray-400 text-center truncate w-full px-1">{card.name}</span>
-          </div>
-        ))}
         {filtered.length === 0 && (
-          <div className="col-span-full text-center text-gray-500 py-12">No cards found.</div>
+          <div className="col-span-full text-center text-gray-500 py-12 space-y-2">
+            {tab === 'owned' ? (
+              <>
+                <p>No cards owned yet.</p>
+                <Link href="/shop" className="text-yellow-400 hover:text-yellow-300 underline text-sm">
+                  Buy packs in the Shop →
+                </Link>
+              </>
+            ) : tab === 'seen' ? (
+              <p>Play some games to encounter cards!</p>
+            ) : (
+              <p>No cards found.</p>
+            )}
+          </div>
         )}
+        {filtered.map(card => {
+          const ownedQty = collection[card.id] ?? 0;
+          const seen = encountered.has(card.id);
+          const isOwned = ownedQty > 0;
+          return (
+            <div key={card.id} className="flex flex-col items-center gap-1">
+              <div className="relative">
+                <CardImage
+                  card={card}
+                  onClick={() => setDetail(card)}
+                  large
+                  dimmed={!isOwned}
+                />
+                {/* Owned quantity badge */}
+                {isOwned && (
+                  <span className="absolute top-1 right-1 bg-yellow-500 text-black text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                    ×{ownedQty}
+                  </span>
+                )}
+                {/* "Seen" indicator for unowned but encountered cards */}
+                {!isOwned && seen && (
+                  <span className="absolute top-1 right-1 bg-gray-600 text-white text-[9px] font-bold rounded-full px-1 h-[16px] flex items-center">
+                    seen
+                  </span>
+                )}
+              </div>
+              <span className="text-xs text-gray-400 text-center truncate w-full px-1">{card.name}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

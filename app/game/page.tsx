@@ -22,7 +22,7 @@ export default function GamePage() {
   } = useGameStore();
 
   const [detailCard, setDetailCard] = useState<CardData | null>(null);
-  const { awardGameResult } = useAuthStore();
+  const { awardGameResult, addEncountered } = useAuthStore();
   const [passModal, setPassModal] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
   const [rewarded, setRewarded] = useState(false);
@@ -42,12 +42,20 @@ export default function GamePage() {
     ).finally(() => setAiRunning(false));
   }, [game?.activePlayer, game?.turn, game?.phase]);
 
-  // Award XP/credits when game ends
+  // Award XP/credits and record encountered cards when game ends
   useEffect(() => {
     if (!game || game.phase !== 'gameover' || rewarded) return;
     setRewarded(true);
     const won = game.winner === 'player1';
     awardGameResult(won);
+    // Collect all unique card IDs from both players' full card pools
+    const allCards = [game.player1, game.player2].flatMap(p => [
+      ...p.deck, ...p.hand, ...p.discard, ...p.prizes,
+      ...(p.active ? [{ card: p.active.card }] : []),
+      ...p.bench.filter(Boolean).map(b => ({ card: b!.card })),
+    ]);
+    const ids = [...new Set(allCards.map(c => c.card.id))].filter(id => !id.startsWith('basic-'));
+    addEncountered(ids);
   }, [game?.phase]);
 
   // Pass-and-play modal

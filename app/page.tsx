@@ -96,9 +96,9 @@ export default function HomePage() {
         {/* Quick links */}
         <div className="grid grid-cols-2 gap-3">
           <Link href="/collection" className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all">
-            <div className="text-3xl">🗂️</div>
-            <div className="font-semibold mt-1">Collection</div>
-            <div className="text-xs text-gray-400">{ALL_CARDS.length} cards</div>
+            <div className="text-3xl">📖</div>
+            <div className="font-semibold mt-1">Pokédex</div>
+            <div className="text-xs text-gray-400">Cards discovered</div>
           </Link>
           <Link href="/deck-builder" className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all">
             <div className="text-3xl">🃏</div>

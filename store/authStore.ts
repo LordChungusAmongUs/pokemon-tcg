@@ -21,6 +21,19 @@ function saveCollectionToStorage(userId: string, c: Record<string, number>) {
   try { localStorage.setItem(collectionKey(userId), JSON.stringify(c)); } catch {}
 }
 
+function encounteredKey(userId: string) {
+  return `pokemon-tcg-encountered-${userId}`;
+}
+function loadEncounteredFromStorage(userId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(encounteredKey(userId));
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch { return new Set(); }
+}
+function saveEncounteredToStorage(userId: string, e: Set<string>) {
+  try { localStorage.setItem(encounteredKey(userId), JSON.stringify([...e])); } catch {}
+}
+
 function isSupabaseConfigured(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
   return url.length > 0 && !url.includes('placeholder');
@@ -67,6 +80,7 @@ interface AuthStore {
   loading: boolean;
   isLocalGuest: boolean;
   collection: Record<string, number>; // card_id → quantity owned
+  encountered: Set<string>;           // card_ids seen in matches
   init: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInAsGuest: () => Promise<void>;
@@ -79,6 +93,7 @@ interface AuthStore {
   addCredits: (amount: number) => Promise<void>;
   awardGameResult: (won: boolean) => Promise<void>;
   addToCollection: (cardIds: string[]) => void;
+  addEncountered: (cardIds: string[]) => void;
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
@@ -88,6 +103,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   loading: true,
   isLocalGuest: false,
   collection: {},
+  encountered: new Set<string>(),
 
   init: async () => {
     // Restore local guest session first (works without any Supabase setup)
@@ -98,7 +114,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const profile = isEmpty ? { ...savedGuest, credits: 1000 } : savedGuest;
       if (isEmpty) saveLocalGuest(profile);
       const collection = loadCollectionFromStorage(LOCAL_GUEST_ID);
-      set({ user: fakeUser(), profile, isLocalGuest: true, loading: false, collection });
+      const encountered = loadEncounteredFromStorage(LOCAL_GUEST_ID);
+      set({ user: fakeUser(), profile, isLocalGuest: true, loading: false, collection, encountered });
       return;
     }
 
@@ -115,7 +132,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       if (user) {
         await get().refreshProfile();
         await get().refreshDecks();
-        set({ collection: loadCollectionFromStorage(user.id) });
+        set({
+          collection: loadCollectionFromStorage(user.id),
+          encountered: loadEncounteredFromStorage(user.id),
+        });
       }
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -124,9 +144,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         if (u) {
           await get().refreshProfile();
           await get().refreshDecks();
-          set({ collection: loadCollectionFromStorage(u.id) });
+          set({
+            collection: loadCollectionFromStorage(u.id),
+            encountered: loadEncounteredFromStorage(u.id),
+          });
         } else {
-          set({ profile: null, decks: [], collection: {} });
+          set({ profile: null, decks: [], collection: {}, encountered: new Set() });
         }
       });
     } catch {
@@ -167,7 +190,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           await supabase.from('profiles').update({ credits: 1000 }).eq('id', data.user.id);
           await get().refreshProfile();
         }
-        set({ collection: loadCollectionFromStorage(data.user.id) });
+        set({
+          collection: loadCollectionFromStorage(data.user.id),
+          encountered: loadEncounteredFromStorage(data.user.id),
+        });
         return;
       }
     }
@@ -179,18 +205,19 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const profile = (!stored || isEmpty) ? makeGuestProfile() : stored;
     saveLocalGuest(profile);
     const collection = loadCollectionFromStorage(LOCAL_GUEST_ID);
-    set({ user: fakeUser(), profile, isLocalGuest: true, loading: false, collection });
+    const encountered = loadEncounteredFromStorage(LOCAL_GUEST_ID);
+    set({ user: fakeUser(), profile, isLocalGuest: true, loading: false, collection, encountered });
   },
 
   signOut: async () => {
     if (get().isLocalGuest) {
       try { localStorage.removeItem(LOCAL_GUEST_KEY); } catch {}
-      set({ user: null, profile: null, decks: [], isLocalGuest: false, collection: {} });
+      set({ user: null, profile: null, decks: [], isLocalGuest: false, collection: {}, encountered: new Set() });
       return;
     }
     const supabase = createClient();
     await supabase.auth.signOut();
-    set({ user: null, profile: null, decks: [], isLocalGuest: false, collection: {} });
+    set({ user: null, profile: null, decks: [], isLocalGuest: false, collection: {}, encountered: new Set() });
   },
 
   refreshProfile: async () => {
@@ -300,5 +327,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const storageId = get().isLocalGuest ? LOCAL_GUEST_ID : user.id;
     saveCollectionToStorage(storageId, updated);
     set({ collection: updated });
+  },
+
+  addEncountered: (cardIds: string[]) => {
+    const { user, encountered } = get();
+    if (!user) return;
+    const updated = new Set(encountered);
+    for (const id of cardIds) updated.add(id);
+    const storageId = get().isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    saveEncounteredToStorage(storageId, updated);
+    set({ encountered: updated });
   },
 }));

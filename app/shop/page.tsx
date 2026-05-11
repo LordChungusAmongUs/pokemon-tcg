@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { ALL_CARDS } from '@/lib/cardUtils';
 import {
   SET_UNLOCK_LEVELS, isSetUnlocked, PACK_COST, THEME_DECK_COST,
-  pickPackCards, computeLevel,
+  pickPackCards, computeLevel, singleCost,
 } from '@/lib/progression';
 import { STARTER_DECKS } from '@/lib/starterDecks';
 import CardImage from '@/components/cards/CardImage';
@@ -23,7 +23,9 @@ export default function ShopPage() {
   const { user, profile, addCredits, addXP } = useAuthStore();
   const [packResult, setPackResult] = useState<CardData[]>([]);
   const [packSet, setPackSet] = useState('');
-  const [tab, setTab] = useState<'packs' | 'decks'>('packs');
+  const [tab, setTab] = useState<'packs' | 'decks' | 'singles'>('packs');
+  const [singlesSearch, setSinglesSearch] = useState('');
+  const [singlesSet, setSinglesSet] = useState('All');
 
   const credits = profile?.credits ?? 0;
   const level = profile?.level ?? 1;
@@ -77,16 +79,20 @@ export default function ShopPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
-          {(['packs', 'decks'] as const).map(t => (
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {[
+            { id: 'packs', label: '📦 Booster Packs' },
+            { id: 'singles', label: '🎴 Singles' },
+            { id: 'decks', label: '🃏 Theme Decks' },
+          ].map(t => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2 rounded-xl text-sm font-bold capitalize transition-all ${
-                tab === t ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              key={t.id}
+              onClick={() => setTab(t.id as typeof tab)}
+              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                tab === t.id ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
               }`}
             >
-              {t === 'packs' ? '📦 Booster Packs' : '🃏 Theme Decks'}
+              {t.label}
             </button>
           ))}
         </div>
@@ -149,6 +155,63 @@ export default function ShopPage() {
             </div>
           </div>
         )}
+
+        {tab === 'singles' && (() => {
+          const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl']);
+          const singlesPool = ALL_CARDS.filter(c => !EXCLUDED.has(c.set) && isSetUnlocked(c.set ?? '', level));
+          const setSingles = singlesSet === 'All' ? singlesPool : singlesPool.filter(c => c.set === singlesSet);
+          const displayed = setSingles
+            .filter(c => !singlesSearch || c.name.toLowerCase().includes(singlesSearch.toLowerCase()))
+            .slice(0, 60);
+          const singleSets = ['All', ...Array.from(new Set(singlesPool.map(c => c.set))).sort()];
+
+          async function buySingle(card: CardData) {
+            if (!user) { alert('Sign in to buy cards!'); return; }
+            const cost = singleCost(card.rarity ?? '');
+            if (credits < cost) { alert('Not enough credits!'); return; }
+            await addCredits(-cost);
+            alert(`Bought ${card.name}! (${cost} credits)`);
+          }
+
+          return (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input
+                  value={singlesSearch}
+                  onChange={e => setSinglesSearch(e.target.value)}
+                  placeholder="Search cards..."
+                  className="flex-1 bg-gray-800 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-yellow-500"
+                />
+                <select
+                  value={singlesSet}
+                  onChange={e => setSinglesSet(e.target.value)}
+                  className="bg-gray-800 rounded-lg px-2 py-2 text-sm"
+                >
+                  {singleSets.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="text-xs text-gray-500">Common 3cr · Uncommon 5cr · Rare 15cr · Holo 50cr · Promo 25cr</div>
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                {displayed.map(card => {
+                  const cost = singleCost(card.rarity ?? '');
+                  const canAfford = credits >= cost;
+                  return (
+                    <div key={card.id} className="flex flex-col items-center gap-1">
+                      <div className="relative">
+                        <CardImage card={card} small dimmed={!canAfford} onClick={() => buySingle(card)} />
+                        <span className="absolute bottom-1 left-0 right-0 text-center text-[10px] font-bold bg-black/70 text-yellow-300">
+                          {cost}cr
+                        </span>
+                      </div>
+                      <span className="text-[9px] text-gray-400 text-center w-full truncate">{card.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {displayed.length === 0 && <p className="text-gray-500 text-sm text-center py-8">No cards found.</p>}
+            </div>
+          );
+        })()}
 
         {tab === 'decks' && (
           <div className="space-y-3">

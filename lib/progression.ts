@@ -71,9 +71,26 @@ export function isSetUnlocked(setName: string, level: number): boolean {
   return level >= required;
 }
 
-export const PACK_COST = 150;
-export const THEME_DECK_COST = 500;
-export const SINGLE_CARD_BASE_COST = 25;
+export const PACK_COST = 25;
+export const THEME_DECK_COST = 150;
+
+export const SINGLE_COSTS: Record<string, number> = {
+  Common: 3,
+  Uncommon: 5,
+  Rare: 15,
+  'Rare Holo': 50,
+  'Holo Rare': 50,
+  Promo: 25,
+};
+
+export function singleCost(rarity: string): number {
+  if (!rarity) return 5;
+  if (rarity.toLowerCase().includes('holo')) return 50;
+  if (rarity.toLowerCase().includes('promo')) return 25;
+  if (rarity.toLowerCase().includes('rare')) return 15;
+  if (rarity.toLowerCase().includes('uncommon')) return 5;
+  return 3; // Common default
+}
 
 export type RarityWeight = 'Common' | 'Uncommon' | 'Rare';
 

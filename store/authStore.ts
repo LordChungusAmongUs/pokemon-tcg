@@ -75,6 +75,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       wins: 0,
       losses: 0,
       elo: 1000,
+      xp: 0,
+      level: 1,
+      credits: 1000,
     });
 
     await get().refreshProfile();
@@ -102,6 +105,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       wins: 0,
       losses: 0,
       elo: 1000,
+      xp: 0,
+      level: 1,
+      credits: 1000,
     }, { onConflict: 'id', ignoreDuplicates: true });
 
     const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();

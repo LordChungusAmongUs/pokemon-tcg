@@ -20,7 +20,7 @@ const SHOP_SETS = Object.entries(SET_UNLOCK_LEVELS)
   .map(([name, level]) => ({ name, level }));
 
 export default function ShopPage() {
-  const { user, profile, addCredits, addXP } = useAuthStore();
+  const { user, profile, addCredits, addXP, addToCollection } = useAuthStore();
   const [packResult, setPackResult] = useState<CardData[]>([]);
   const [packSet, setPackSet] = useState('');
   const [tab, setTab] = useState<'packs' | 'decks' | 'singles'>('packs');
@@ -47,7 +47,8 @@ export default function ShopPage() {
       .filter(Boolean) as CardData[];
 
     await addCredits(-PACK_COST);
-    await addXP(25); // bonus XP for opening a pack
+    await addXP(25);
+    addToCollection(pickedIds);
     setPackResult(pickedCards);
     setPackSet(setName);
   }
@@ -170,7 +171,8 @@ export default function ShopPage() {
             const cost = singleCost(card.rarity ?? '');
             if (credits < cost) { alert('Not enough credits!'); return; }
             await addCredits(-cost);
-            alert(`Bought ${card.name}! (${cost} credits)`);
+            addToCollection([card.id]);
+            alert(`Bought ${card.name}! Check your Deck Builder.`);
           }
 
           return (

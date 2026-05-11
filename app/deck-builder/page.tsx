@@ -35,13 +35,12 @@ function deckToCards(cardIds: string[]): CardData[] {
 }
 
 export default function DeckBuilderPage() {
-  const { user, profile, decks: cloudDecks, saveDeck: saveCloudDeck, deleteDeck: deleteCloudDeck, refreshDecks } = useAuthStore();
+  const { user, profile, decks: cloudDecks, saveDeck: saveCloudDeck, deleteDeck: deleteCloudDeck, refreshDecks, collection } = useAuthStore();
   const playerLevel = profile?.level ?? 1;
 
   const [search, setSearch] = useState('');
   const [format, setFormat] = useState('');
   const [set, setSet] = useState('All');
-  const [showLocked, setShowLocked] = useState(false);
   const [detail, setDetail] = useState<CardData | null>(null);
   const [deck, setDeck] = useState<CardData[]>([]);
   const [deckName, setDeckName] = useState('My Deck');
@@ -61,19 +60,26 @@ export default function DeckBuilderPage() {
   const activeFormat = FORMATS.find(f => f.id === format);
   const formatSetNames = activeFormat ? new Set(activeFormat.sets) : null;
 
+  // How many of a card the player owns (basic energy is unlimited)
+  function owned(card: CardData): number {
+    if (card.supertype === 'Energy' && card.subtype === 'Basic') return 99;
+    return collection[card.id] ?? 0;
+  }
+
   const filtered = useMemo(() => {
-    const baseFilter = showLocked ? BROWSE_CARDS : BROWSE_CARDS.filter(c => {
-      if (c.supertype === 'Energy') return true;
-      if (!c.set) return false;
-      return isSetUnlocked(c.set, playerLevel);
-    });
-    return baseFilter.filter(c => {
-      if (formatSetNames && c.set && !formatSetNames.has(c.set) && c.supertype !== 'Energy') return false;
+    return BROWSE_CARDS.filter(c => {
+      const isBasicEnergy = c.supertype === 'Energy' && c.subtype === 'Basic';
+      // Must own at least one copy (basic energy always passes)
+      if (!isBasicEnergy && (collection[c.id] ?? 0) === 0) return false;
+      // Locked sets still blocked
+      if (!isBasicEnergy && c.set && !isSetUnlocked(c.set, playerLevel)) return false;
+      // Format/set/search filters
+      if (formatSetNames && c.set && !formatSetNames.has(c.set) && !isBasicEnergy) return false;
       if (!formatSetNames && set !== 'All' && c.set !== set) return false;
       if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [search, set, format, showLocked, playerLevel]);
+  }, [search, set, format, playerLevel, collection]);
 
   function countInDeck(cardId: string) {
     return deck.filter(c => c.id === cardId).length;
@@ -83,8 +89,8 @@ export default function DeckBuilderPage() {
     if (deck.length >= 60) return;
     const isBasicEnergy = card.supertype === 'Energy' && card.subtype === 'Basic';
     if (!isBasicEnergy && countInDeck(card.id) >= 4) return;
-    // Block locked cards
-    if (card.set && !isSetUnlocked(card.set, playerLevel) && card.supertype !== 'Energy') return;
+    if (!isBasicEnergy && countInDeck(card.id) >= owned(card)) return; // can't add more than you own
+    if (card.set && !isSetUnlocked(card.set, playerLevel) && !isBasicEnergy) return;
     setDeck([...deck, card]);
   }
 
@@ -177,32 +183,34 @@ export default function DeckBuilderPage() {
 
           {/* Set filter (disabled when a format is active) */}
           {!format && (
-            <div className="flex gap-2 items-center">
-              <select
-                value={set}
-                onChange={e => setSet(e.target.value)}
-                className="flex-1 bg-gray-800 rounded-lg px-2 py-1 text-sm"
-              >
-                {setOptions.map(s => (
-                  typeof s === 'string'
-                    ? <option key={s} value={s}>All Sets</option>
-                    : <option key={s.value} value={s.value} disabled={s.locked}>{s.label}</option>
-                ))}
-              </select>
-              <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
-                <input type="checkbox" checked={showLocked} onChange={e => setShowLocked(e.target.checked)} />
-                Preview locked
-              </label>
-            </div>
+            <select
+              value={set}
+              onChange={e => setSet(e.target.value)}
+              className="w-full bg-gray-800 rounded-lg px-2 py-1 text-sm"
+            >
+              {setOptions.map(s => (
+                typeof s === 'string'
+                  ? <option key={s} value={s}>All Sets</option>
+                  : <option key={s.value} value={s.value} disabled={s.locked}>{s.label}</option>
+              ))}
+            </select>
           )}
         </div>
 
         <div className="p-2 grid grid-cols-3 sm:grid-cols-4 gap-2 overflow-y-auto">
+          {filtered.length === 0 && (
+            <div className="col-span-full text-center py-12 text-gray-500 text-sm space-y-2">
+              <p>No cards in your collection yet.</p>
+              <Link href="/shop" className="text-yellow-400 hover:text-yellow-300 underline">
+                Buy packs or singles in the Shop
+              </Link>
+            </div>
+          )}
           {filtered.map(card => {
             const inDeck = countInDeck(card.id);
             const isBasicEnergy = card.supertype === 'Energy' && card.subtype === 'Basic';
-            const locked = !isBasicEnergy && card.set && !isSetUnlocked(card.set, playerLevel);
-            const maxed = (!isBasicEnergy && inDeck >= 4) || deck.length >= 60 || !!locked;
+            const ownedQty = owned(card);
+            const maxed = inDeck >= Math.min(4, ownedQty) || deck.length >= 60;
             return (
               <div key={card.id} className="flex flex-col items-center gap-1">
                 <div className="relative">
@@ -212,14 +220,16 @@ export default function DeckBuilderPage() {
                     dimmed={maxed}
                     small
                   />
+                  {/* In-deck count */}
                   {inDeck > 0 && (
                     <span className="absolute top-1 right-1 bg-yellow-500 text-black text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                       {inDeck}
                     </span>
                   )}
-                  {locked && (
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/60 rounded text-xs font-bold text-yellow-300">
-                      Lv{SET_UNLOCK_LEVELS[card.set!]}
+                  {/* Owned quantity (bottom-left) */}
+                  {!isBasicEnergy && (
+                    <span className="absolute bottom-1 left-1 text-[9px] font-bold text-white bg-black/70 rounded px-0.5">
+                      ×{ownedQty}
                     </span>
                   )}
                 </div>

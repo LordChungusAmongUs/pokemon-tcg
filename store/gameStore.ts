@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import type { GameState, CardData } from '@/engine/GameState';
 import {
-  initGame, doDrawPhase, drawCard,
+  initGame, confirmSetup, doDrawPhase, drawCard,
   playBasicToBench, playActiveFromBench,
   attachEnergy, retreat, attack,
   endTurn, playTrainer, evolve,
@@ -39,6 +39,7 @@ interface GameStore {
   endTurnAction: () => void;
   playTrainerAction: (handUid: string) => void;
   evolveAction: (handUid: string, targetUid: string) => void;
+  confirmSetupAction: (activeUid: string, benchUids: string[]) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -111,5 +112,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       game: s.game ? evolve(s.game, handUid, targetUid) : null,
       selectedHandUid: null,
     }));
+  },
+
+  confirmSetupAction: (activeUid, benchUids) => {
+    const { game } = get();
+    if (!game || game.phase !== 'setup') return;
+    const playerId = game.setupStep === 'p1-setup' ? 'player1' : 'player2';
+    set({ game: confirmSetup(game, playerId, activeUid, benchUids) });
   },
 }));

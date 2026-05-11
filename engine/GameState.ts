@@ -97,6 +97,7 @@ export interface PlayerState {
 
 export interface GameState {
   phase: GamePhase;
+  setupStep?: 'p1-setup' | 'p2-setup'; // only set during phase==='setup'
   turn: number;
   activePlayer: 'player1' | 'player2';
   player1: PlayerState;

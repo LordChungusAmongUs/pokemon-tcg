@@ -49,6 +49,59 @@ function inPlayPokemon(card: CardData, turn: number): InPlayPokemon {
 
 // ─── init ────────────────────────────────────────────────────────────────────
 
+function dealHand(player: PlayerState): PlayerState {
+  return { ...player, hand: player.deck.slice(0, 7), deck: player.deck.slice(7) };
+}
+
+function shuffleHandBack(player: PlayerState): PlayerState {
+  const newDeck = shuffle([...player.hand, ...player.deck]);
+  return { ...player, hand: [], deck: newDeck };
+}
+
+function hasBasicInHand(player: PlayerState): boolean {
+  return player.hand.some(c => isBasicPokemon(c.card));
+}
+
+function finishSetup(state: GameState): GameState {
+  // Deal 6 prize cards to each player
+  const p1 = { ...state.player1, prizes: state.player1.deck.slice(0, 6), deck: state.player1.deck.slice(6) };
+  const p2 = { ...state.player2, prizes: state.player2.deck.slice(0, 6), deck: state.player2.deck.slice(6) };
+
+  // Coin flip for who goes first
+  const p1First = Math.random() < 0.5;
+  const firstPlayer: 'player1' | 'player2' = p1First ? 'player1' : 'player2';
+  const firstName = p1First ? state.player1.name : state.player2.name;
+
+  return log({
+    ...state,
+    player1: p1,
+    player2: p2,
+    setupStep: undefined,
+    activePlayer: firstPlayer,
+    phase: 'main', // first player skips draw on turn 1
+    turn: 1,
+  }, `🪙 Coin flip: ${firstName} goes first!`);
+}
+
+function aiAutoSetup(state: GameState): GameState {
+  const p2 = state.player2;
+  const basics = p2.hand.filter(c => isBasicPokemon(c.card));
+  if (basics.length === 0) return state;
+
+  const activeCard = basics[0];
+  const active = inPlayPokemon(activeCard.card, 0);
+  let newHand = p2.hand.filter(c => c.uid !== activeCard.uid);
+
+  const newBench: (InPlayPokemon | null)[] = [null, null, null, null, null];
+  const remainingBasics = newHand.filter(c => isBasicPokemon(c.card));
+  for (let i = 0; i < Math.min(remainingBasics.length, 5); i++) {
+    newBench[i] = inPlayPokemon(remainingBasics[i].card, 0);
+    newHand = newHand.filter(c => c.uid !== remainingBasics[i].uid);
+  }
+
+  return { ...state, player2: { ...p2, active, bench: newBench, hand: newHand } };
+}
+
 export function initGame(
   p1Name: string, p1Deck: CardData[],
   p2Name: string, p2Deck: CardData[],
@@ -57,25 +110,93 @@ export function initGame(
   let p1 = makePlayer('player1', p1Name, p1Deck);
   let p2 = makePlayer('player2', p2Name, p2Deck);
 
-  // Deal 7 cards each
-  p1 = { ...p1, hand: p1.deck.slice(0, 7), deck: p1.deck.slice(7) };
-  p2 = { ...p2, hand: p2.deck.slice(0, 7), deck: p2.deck.slice(7) };
+  // Deal 7 cards each, mulligan until each player has at least one basic
+  let p1Mulligans = 0;
+  p1 = dealHand(p1);
+  while (!hasBasicInHand(p1) && p1Mulligans < 20) {
+    p1 = dealHand(shuffleHandBack(p1));
+    p1Mulligans++;
+  }
 
-  // Deal 6 prize cards each
-  p1 = { ...p1, prizes: p1.deck.slice(0, 6), deck: p1.deck.slice(6) };
-  p2 = { ...p2, prizes: p2.deck.slice(0, 6), deck: p2.deck.slice(6) };
+  let p2Mulligans = 0;
+  p2 = dealHand(p2);
+  while (!hasBasicInHand(p2) && p2Mulligans < 20) {
+    p2 = dealHand(shuffleHandBack(p2));
+    p2Mulligans++;
+  }
+
+  // Opponent draws 1 extra card per mulligan
+  for (let i = 0; i < p2Mulligans && p1.deck.length > 0; i++) {
+    p1 = { ...p1, hand: [...p1.hand, p1.deck[0]], deck: p1.deck.slice(1) };
+  }
+  for (let i = 0; i < p1Mulligans && p2.deck.length > 0; i++) {
+    p2 = { ...p2, hand: [...p2.hand, p2.deck[0]], deck: p2.deck.slice(1) };
+  }
+
+  const logs: string[] = ['Both players draw their opening hands.'];
+  if (p1Mulligans > 0) logs.push(`${p1Name} mulliganed ${p1Mulligans}× — ${p2Name} draws ${p1Mulligans} extra card(s).`);
+  if (p2Mulligans > 0) logs.push(`${p2Name} mulliganed ${p2Mulligans}× — ${p1Name} draws ${p2Mulligans} extra card(s).`);
+  logs.push(`${p1Name}: choose your Active Pokémon.`);
 
   return {
-    phase: 'main', // skip setup phase for simplicity — auto-deal
+    phase: 'setup',
+    setupStep: 'p1-setup',
     turn: 1,
     activePlayer: 'player1',
     player1: p1,
     player2: p2,
     winner: null,
-    log: [`Game started! ${p1Name} goes first.`],
+    log: logs,
     pendingCoinFlip: false,
     mode,
   };
+}
+
+// ─── setup confirmation ───────────────────────────────────────────────────────
+
+export function confirmSetup(
+  state: GameState,
+  playerId: 'player1' | 'player2',
+  activeHandUid: string,
+  benchHandUids: string[],
+): GameState {
+  if (state.phase !== 'setup') return state;
+
+  const player = state[playerId];
+  const activeCard = player.hand.find(c => c.uid === activeHandUid);
+  if (!activeCard || !isBasicPokemon(activeCard.card)) return state;
+
+  // Place active (turnPlayed=0 so they can evolve from turn 1 onward)
+  const active = inPlayPokemon(activeCard.card, 0);
+  let newHand = player.hand.filter(c => c.uid !== activeHandUid);
+
+  // Place bench
+  const newBench: (InPlayPokemon | null)[] = [null, null, null, null, null];
+  let slot = 0;
+  for (const uid of benchHandUids) {
+    if (slot >= 5) break;
+    const card = newHand.find(c => c.uid === uid);
+    if (card && isBasicPokemon(card.card)) {
+      newBench[slot] = inPlayPokemon(card.card, 0);
+      newHand = newHand.filter(c => c.uid !== uid);
+      slot++;
+    }
+  }
+
+  let next: GameState = log(
+    { ...state, [playerId]: { ...player, active, bench: newBench, hand: newHand } },
+    `${player.name} sends out ${active.card.name}!${slot > 0 ? ` (${slot} benched)` : ''}`,
+  );
+
+  if (playerId === 'player1') {
+    if (state.mode === 'vs-ai') {
+      next = aiAutoSetup(next);
+      return finishSetup(next);
+    }
+    return { ...next, setupStep: 'p2-setup' };
+  }
+
+  return finishSetup(next);
 }
 
 // ─── draw ────────────────────────────────────────────────────────────────────

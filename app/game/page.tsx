@@ -19,6 +19,7 @@ export default function GamePage() {
     drawPhase, playBasic, promoteFromBench,
     attachEnergyAction, retreatAction, attackAction,
     endTurnAction, playTrainerAction, evolveAction, selectHandCard,
+    confirmSetupAction,
   } = useGameStore();
 
   const [detailCard, setDetailCard] = useState<CardData | null>(null);
@@ -26,12 +27,22 @@ export default function GamePage() {
   const [passModal, setPassModal] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
   const [rewarded, setRewarded] = useState(false);
+  const [setupActiveUid, setSetupActiveUid] = useState<string | null>(null);
+  const [setupBenchUids, setSetupBenchUids] = useState<string[]>([]);
+  const [setupPassShown, setSetupPassShown] = useState(false);
   const stateRef = useRef(game);
   stateRef.current = game;
+
+  // Reset setup local state when step changes
+  useEffect(() => {
+    setSetupActiveUid(null);
+    setSetupBenchUids([]);
+  }, [game?.setupStep]);
 
   // Run AI turn
   useEffect(() => {
     if (!game || game.phase === 'gameover') return;
+    if (game.phase === 'setup') return;
     if (game.mode !== 'vs-ai') return;
     if (game.activePlayer !== 'player2') return;
     if (aiRunning) return;
@@ -72,6 +83,112 @@ export default function GamePage() {
           <Link href="/" className="px-6 py-3 bg-yellow-500 rounded-xl font-bold text-black hover:bg-yellow-400">
             Go Home
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Setup phase overlay ──────────────────────────────────────────────────────
+  if (game.phase === 'setup') {
+    const isP2Step = game.setupStep === 'p2-setup';
+    const setupPlayerId = isP2Step ? 'player2' : 'player1';
+    const setupPlayer = game[setupPlayerId];
+
+    // Pass modal between p1 and p2 setup in local-2p
+    if (isP2Step && game.mode === 'local-2p' && !setupPassShown) {
+      return (
+        <div className="h-screen bg-green-950 flex items-center justify-center">
+          <div className="bg-gray-800 rounded-2xl p-8 text-center space-y-4 max-w-sm">
+            <p className="text-2xl font-bold text-white">Pass to {game.player2.name}</p>
+            <p className="text-gray-400 text-sm">Hand the device to {game.player2.name}.</p>
+            <button
+              onClick={() => setSetupPassShown(true)}
+              className="w-full py-3 bg-yellow-500 rounded-xl font-bold text-black hover:bg-yellow-400"
+            >
+              I'm {game.player2.name} — Ready!
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const basics = setupPlayer.hand.filter(c => isBasicPokemon(c.card));
+    const others = setupPlayer.hand.filter(c => !isBasicPokemon(c.card));
+
+    const handleBasicClick = (uid: string) => {
+      if (setupActiveUid === uid) {
+        setSetupActiveUid(null);
+      } else if (setupBenchUids.includes(uid)) {
+        setSetupBenchUids(prev => prev.filter(u => u !== uid));
+      } else if (!setupActiveUid) {
+        setSetupActiveUid(uid);
+      } else {
+        setSetupBenchUids(prev => [...prev, uid]);
+      }
+    };
+
+    const handleConfirm = () => {
+      if (!setupActiveUid) return;
+      confirmSetupAction(setupActiveUid, setupBenchUids);
+      setSetupPassShown(false);
+    };
+
+    return (
+      <div className="min-h-screen bg-gray-950 text-white p-4 overflow-y-auto">
+        <div className="max-w-sm mx-auto space-y-4 pb-8">
+          <div className="text-center pt-4">
+            <h2 className="text-2xl font-bold text-yellow-400">{setupPlayer.name}'s Setup</h2>
+            <p className="text-sm text-gray-400 mt-1">
+              {!setupActiveUid
+                ? 'Tap a Basic Pokémon to set as your Active.'
+                : `Active: ${basics.find(c => c.uid === setupActiveUid)?.card.name}. Tap more basics to bench them.`}
+            </p>
+          </div>
+
+          {/* Basic pokemon grid */}
+          <div className="grid grid-cols-3 gap-3">
+            {basics.map(c => {
+              const isActive = setupActiveUid === c.uid;
+              const isBenched = setupBenchUids.includes(c.uid);
+              return (
+                <div key={c.uid} className="flex flex-col items-center gap-1 cursor-pointer" onClick={() => handleBasicClick(c.uid)}>
+                  <div className={`rounded-xl overflow-hidden border-2 transition-all ${
+                    isActive ? 'border-yellow-400 ring-2 ring-yellow-400' :
+                    isBenched ? 'border-blue-400 ring-2 ring-blue-400' :
+                    'border-transparent'
+                  }`}>
+                    <CardImage card={c.card} small />
+                  </div>
+                  <span className={`text-[10px] font-bold ${isActive ? 'text-yellow-400' : isBenched ? 'text-blue-400' : 'text-gray-400'}`}>
+                    {isActive ? 'ACTIVE' : isBenched ? 'BENCH' : c.card.name}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Other cards (non-basics stay in hand) */}
+          {others.length > 0 && (
+            <div>
+              <p className="text-xs text-gray-500 mb-2">Stays in hand:</p>
+              <div className="flex flex-wrap gap-2">
+                {others.map(c => (
+                  <div key={c.uid} className="opacity-40 flex flex-col items-center">
+                    <CardImage card={c.card} small />
+                    <span className="text-[9px] text-gray-500 max-w-14 truncate text-center">{c.card.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={handleConfirm}
+            disabled={!setupActiveUid}
+            className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-bold rounded-xl text-lg"
+          >
+            Ready!
+          </button>
         </div>
       </div>
     );

@@ -104,6 +104,7 @@ interface AuthStore {
   addToCollection: (cardIds: string[]) => void;
   addEncountered: (cardIds: string[]) => void;
   ensureStarterDeck: () => void;
+  resetAccount: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
@@ -362,5 +363,31 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const cardIds = machampDeck.cardIds.filter(id => !id.startsWith('basic-'));
     get().addToCollection(cardIds);
     markStarterGiven(storageId);
+  },
+
+  resetAccount: async () => {
+    const { user, isLocalGuest, profile } = get();
+    if (!user) return;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+
+    saveCollectionToStorage(storageId, {});
+    saveEncounteredToStorage(storageId, new Set());
+    try { localStorage.removeItem(starterGivenKey(storageId)); } catch {}
+
+    if (isLocalGuest) {
+      const reset: Profile = { ...makeGuestProfile(), display_name: profile?.display_name ?? 'Trainer' };
+      saveLocalGuest(reset);
+      set({ profile: reset, collection: {}, encountered: new Set() });
+      get().ensureStarterDeck();
+      return;
+    }
+
+    const supabase = createClient();
+    await supabase.from('profiles').update({
+      xp: 0, level: 1, credits: STARTING_CREDITS, wins: 0, losses: 0, elo: 1000,
+    }).eq('id', user.id);
+    set({ collection: {}, encountered: new Set() });
+    await get().refreshProfile();
+    get().ensureStarterDeck();
   },
 }));

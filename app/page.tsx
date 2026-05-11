@@ -21,7 +21,7 @@ function deckToCards(deck: LocalDeck): CardData[] {
 }
 
 export default function HomePage() {
-  const { user, profile, decks: cloudDecks, signOut } = useAuthStore();
+  const { user, profile, decks: cloudDecks, signOut, resetAccount } = useAuthStore();
   const [localDecks, setLocalDecks] = useState<LocalDeck[]>([]);
   const [p1Deck, setP1Deck] = useState('');
   const [p2Deck, setP2Deck] = useState('');
@@ -76,6 +76,12 @@ export default function HomePage() {
                   <span className="text-xs bg-yellow-500 text-black font-bold px-2 py-0.5 rounded-full">Lv{level}</span>
                   <span className="text-xs text-gray-400">Elo {profile?.elo ?? 1000}</span>
                   <button onClick={signOut} className="text-xs text-gray-500 hover:text-white">Sign out</button>
+                  <button
+                    onClick={() => { if (confirm('Reset account? This clears your collection, XP, and credits. You cannot undo this.')) resetAccount(); }}
+                    className="text-xs text-red-700 hover:text-red-400"
+                  >
+                    Reset
+                  </button>
                 </div>
                 <div className="max-w-[200px] mx-auto">
                   <div className="flex justify-between text-[10px] text-gray-500 mb-0.5">

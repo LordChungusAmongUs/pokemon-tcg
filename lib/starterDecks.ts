@@ -24,6 +24,8 @@ const SWITCH      = 'base1-95';
 const PLUSPOWER   = 'base1-84';
 const GOW         = 'base1-93'; // Gust of Wind
 const ENERGY_REM  = 'base1-92'; // Energy Removal
+const ENERGY_RET  = 'base1-81'; // Energy Retrieval
+const POKEDEX     = 'base1-87'; // Pokédex
 const SUPER_POT   = 'base1-90'; // Super Potion
 const FULL_HEAL   = 'base1-82';
 const REVIVE      = 'base1-89';
@@ -43,6 +45,38 @@ const POKEBALL_J  = 'base2-64'; // Poké Ball (Jungle)
 function r(id: string, n: number): string[] { return Array(n).fill(id); }
 
 export const STARTER_DECKS: StarterDeck[] = [
+
+  // ── CUSTOM BASE SET DECK ──────────────────────────────────────────────────
+  {
+    id: 'custom-fists-and-fire',
+    name: 'Fists & Fire',
+    description: 'Base Set only. Machamp punishes with big Fighting damage; Charmander/Charmeleon build toward the fire side.',
+    type: 'Fighting/Fire',
+    cardIds: [
+      // Pokémon (24)
+      ...r('base1-47', 3), // Diglett
+      ...r('base1-52', 4), // Machop
+      ...r('base1-34', 2), // Machoke
+      ...r('base1-8',  1), // Machamp
+      ...r('base1-60', 4), // Ponyta
+      ...r('base1-46', 4), // Charmander
+      ...r('base1-24', 2), // Charmeleon
+      ...r('base1-28', 1), // Growlithe
+      ...r('base1-61', 2), // Rattata
+      ...r('base1-26', 1), // Dratini
+      // Trainers (9)
+      ...r(BILL,       1),
+      ...r(ENERGY_REM, 1),
+      ...r(ENERGY_RET, 1),
+      ...r(GOW,        1),
+      ...r(POKEDEX,    1),
+      ...r(POTION,     2),
+      ...r(SWITCH,     2),
+      // Energy (28)
+      ...r(E_FIGHTING, 14),
+      ...r(E_FIRE,     14),
+    ],
+  },
 
   // ── STARTER (30-card intro deck) ──────────────────────────────────────────
   {

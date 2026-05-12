@@ -1,7 +1,7 @@
 import type { GameState, PlayerState, InPlayPokemon } from '@/engine/GameState';
 import {
   playBasicToBench, attachEnergy, attack, endTurn,
-  doDrawPhase, playTrainer, retreat,
+  doDrawPhase, playTrainer, retreat, resolvePendingTrainer,
 } from '@/engine/GameEngine';
 import { canPayCost, isBasicPokemon, isTrainer } from '@/lib/cardUtils';
 
@@ -99,6 +99,7 @@ export async function runAITurn(
     const name = card.card.name.toLowerCase();
     if (name.includes('professor oak') || name === 'bill' || name.includes('pokédex')) {
       state = playTrainer(state, card.uid);
+      if (state.pendingTrainer) state = resolvePendingTrainer(state, 0);
       setState(state);
       await randomDelay();
       if (state.phase === 'gameover') return;

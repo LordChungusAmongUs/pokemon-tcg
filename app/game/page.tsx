@@ -9,7 +9,7 @@ import CardDetail from '@/components/cards/CardDetail';
 import GameLog from '@/components/board/GameLog';
 import Image from 'next/image';
 import type { CardData } from '@/engine/GameState';
-import { isBasicPokemon, canPayCost, cardImageSrc } from '@/lib/cardUtils';
+import { isBasicPokemon, canPayCost, cardImageSrc, ALL_CARDS } from '@/lib/cardUtils';
 import { runAITurn } from '@/ai/SimpleAI';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
@@ -27,13 +27,14 @@ export default function GamePage() {
     game, selectedHandUid,
     drawPhase, playBasic, promoteFromBench,
     attachEnergyAction, retreatAction, attackAction,
-    endTurnAction, playTrainerAction, evolveAction, selectHandCard,
+    endTurnAction, playTrainerAction, resolveTrainerAction, evolveAction, selectHandCard,
     confirmSetupAction,
   } = useGameStore();
 
   const [detailCard, setDetailCard] = useState<CardData | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
-  const { awardGameResult, addEncountered } = useAuthStore();
+  const { awardGameResult, addEncountered, addToCollection } = useAuthStore();
+  const [promoWon, setPromoWon] = useState<string | null>(null);
   const [passModal, setPassModal] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
   const [rewarded, setRewarded] = useState(false);
@@ -68,6 +69,15 @@ export default function GamePage() {
     setRewarded(true);
     const won = game.winner === 'player1';
     awardGameResult(won, game.mode === 'pvp' ? 'pvp' : 'vs-ai');
+    // Award 1 random Wizards Black Star Promo on AI win
+    if (won && game.mode === 'vs-ai') {
+      const promos = ALL_CARDS.filter(c => c.set === 'Wizards Black Star Promos');
+      if (promos.length > 0) {
+        const pick = promos[Math.floor(Math.random() * promos.length)];
+        addToCollection([pick.id]);
+        setPromoWon(pick.name);
+      }
+    }
     const allCards = [game.player1, game.player2].flatMap(p => [
       ...p.deck, ...p.hand, ...p.discard, ...p.prizes,
       ...(p.active ? [{ card: p.active.card }] : []),
@@ -470,6 +480,11 @@ export default function GamePage() {
           <div className="bg-gray-800 rounded-2xl p-8 text-center space-y-4">
             <p className="text-3xl font-bold text-yellow-400">Game Over!</p>
             <p className="text-xl">{game.winner ? game[game.winner].name : '???'} wins!</p>
+            {promoWon && (
+              <p className="text-sm text-yellow-300 bg-yellow-900/40 rounded-xl px-3 py-2">
+                ⭐ Promo earned: <span className="font-bold">{promoWon}</span>
+              </p>
+            )}
             <Link href="/" className="block w-full py-3 bg-yellow-500 rounded-xl font-bold text-black hover:bg-yellow-400">
               Back to Menu
             </Link>
@@ -478,6 +493,60 @@ export default function GamePage() {
       )}
 
       {detailCard && <CardDetail card={detailCard} onClose={() => setDetailCard(null)} />}
+
+      {/* ── Pending trainer modals ─────────────────────────────── */}
+      {game.pendingTrainer?.type === 'energy-removal' && p2.active && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 rounded-2xl p-5 max-w-xs w-full space-y-3">
+            <h3 className="font-bold text-yellow-400 text-center">Energy Removal</h3>
+            <p className="text-sm text-gray-400 text-center">Choose an energy to remove from {p2.active.card.name}:</p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {p2.active.attachedEnergy.map((e, i) => (
+                <button key={e.uid} onClick={() => resolveTrainerAction(i)}
+                  className="px-3 py-2 bg-gray-700 hover:bg-red-700 rounded-xl text-sm font-bold text-white">
+                  {e.type} Energy
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {game.pendingTrainer?.type === 'gust-of-wind' && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 rounded-2xl p-5 max-w-xs w-full space-y-3">
+            <h3 className="font-bold text-yellow-400 text-center">Gust of Wind</h3>
+            <p className="text-sm text-gray-400 text-center">Choose a Pokémon to pull in from {p2.name}'s bench:</p>
+            <div className="flex flex-wrap gap-3 justify-center">
+              {p2.bench.map((poke, i) => poke ? (
+                <button key={poke.uid} onClick={() => resolveTrainerAction(i)}
+                  className="flex flex-col items-center gap-1 px-3 py-2 bg-gray-700 hover:bg-blue-700 rounded-xl">
+                  <CardImage card={poke.card} small />
+                  <span className="text-xs text-white font-bold">{poke.card.name}</span>
+                </button>
+              ) : null)}
+            </div>
+          </div>
+        </div>
+      )}
+      {game.pendingTrainer?.type === 'pokedex' && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 rounded-2xl p-5 max-w-sm w-full space-y-3">
+            <h3 className="font-bold text-yellow-400 text-center">Pokédex — Top 5 Cards</h3>
+            <div className="flex gap-2 justify-center flex-wrap">
+              {game.pendingTrainer.cards.map((card, i) => (
+                <div key={i} className="flex flex-col items-center gap-1">
+                  <CardImage card={card} small />
+                  <span className="text-[9px] text-gray-400 text-center max-w-14 truncate">{card.name}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => resolveTrainerAction(0)}
+              className="w-full py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-sm">
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Scrollable board ─────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden">

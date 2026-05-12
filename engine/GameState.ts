@@ -97,6 +97,11 @@ export interface PlayerState {
   attackDamageBonus: number;        // from PlusPower; added after W/R; reset end of turn
 }
 
+export type PendingTrainer =
+  | { type: 'energy-removal' }
+  | { type: 'gust-of-wind' }
+  | { type: 'pokedex'; cards: CardData[] };
+
 export interface GameState {
   phase: GamePhase;
   setupStep?: 'p1-setup' | 'p2-setup'; // only set during phase==='setup'
@@ -107,6 +112,7 @@ export interface GameState {
   winner: 'player1' | 'player2' | null;
   log: string[];
   pendingCoinFlip: boolean;
+  pendingTrainer?: PendingTrainer;
   mode: 'vs-ai' | 'local-2p';
 }
 

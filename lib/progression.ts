@@ -114,10 +114,15 @@ export function pickPackCards(setCards: { id: string; rarity: string }[]): strin
   const rnd = (pool: { id: string }[]): string =>
     pool[Math.floor(Math.random() * pool.length)].id;
 
+  // Pick n unique cards (no duplicates within a pack slot)
   const pickN = (preferred: typeof setCards, fallback: typeof setCards, n: number): string[] => {
-    const pool = preferred.length > 0 ? preferred : fallback;
+    const pool = [...(preferred.length > 0 ? preferred : fallback)];
     const out: string[] = [];
-    for (let i = 0; i < n; i++) out.push(rnd(pool));
+    for (let i = 0; i < n && pool.length > 0; i++) {
+      const idx = Math.floor(Math.random() * pool.length);
+      out.push(pool[idx].id);
+      pool.splice(idx, 1);
+    }
     return out;
   };
 

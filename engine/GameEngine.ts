@@ -151,16 +151,9 @@ export function initGame(
     p2Mulligans++;
   }
 
-  for (let i = 0; i < p2Mulligans && p1.deck.length > 0; i++) {
-    p1 = { ...p1, hand: [...p1.hand, p1.deck[0]], deck: p1.deck.slice(1) };
-  }
-  for (let i = 0; i < p1Mulligans && p2.deck.length > 0; i++) {
-    p2 = { ...p2, hand: [...p2.hand, p2.deck[0]], deck: p2.deck.slice(1) };
-  }
-
   const logs: string[] = ['Both players draw their opening hands.'];
-  if (p1Mulligans > 0) logs.push(`${p1Name} mulliganed ${p1Mulligans}× — ${p2Name} draws ${p1Mulligans} extra card(s).`);
-  if (p2Mulligans > 0) logs.push(`${p2Name} mulliganed ${p2Mulligans}× — ${p1Name} draws ${p2Mulligans} extra card(s).`);
+  if (p1Mulligans > 0) logs.push(`${p1Name} mulliganed ${p1Mulligans}×.`);
+  if (p2Mulligans > 0) logs.push(`${p2Name} mulliganed ${p2Mulligans}×.`);
   logs.push(`${p1Name}: choose your Active Pokémon.`);
 
   return {
@@ -686,9 +679,13 @@ export function endTurn(state: GameState): GameState {
 
 export function playTrainer(state: GameState, handUid: string): GameState {
   const active = state.activePlayer;
+  const opp = active === 'player1' ? 'player2' : 'player1';
   const player = state[active];
   const card = player.hand.find(c => c.uid === handUid);
   if (!card || card.card.supertype !== 'Trainer') return state;
+
+  const name = card.card.name.toLowerCase();
+  const id = card.card.id;
 
   // Remove card from hand and put in discard
   let next: GameState = {
@@ -701,8 +698,64 @@ export function playTrainer(state: GameState, handUid: string): GameState {
   };
   next = log(next, `${player.name} plays ${card.card.name}.`);
 
-  // Delegate to comprehensive handler
+  // Selection trainers — UI must resolve via resolvePendingTrainer
+  if (name === 'energy removal' || id === 'base1-92') {
+    if (!next[opp].active || next[opp].active.attachedEnergy.length === 0) {
+      return log(next, `No energy to remove from ${next[opp].active?.card.name ?? 'opponent'}!`);
+    }
+    return { ...next, pendingTrainer: { type: 'energy-removal' } };
+  }
+  if (name === 'gust of wind' || id === 'base1-93') {
+    if (!next[opp].bench.some(b => b !== null)) {
+      return log(next, `${next[opp].name} has no benched Pokémon to gust!`);
+    }
+    return { ...next, pendingTrainer: { type: 'gust-of-wind' } };
+  }
+  if (name === 'pokédex' || name === 'pokedex' || id === 'base1-87') {
+    const top5 = next[active].deck.slice(0, 5).map(c => c.card);
+    return { ...next, pendingTrainer: { type: 'pokedex', cards: top5 } };
+  }
+
+  // Delegate to comprehensive handler for all other trainers
   return handleTrainerEffect(next, next, active, card, drawCard, inPlayPokemon);
+}
+
+export function resolvePendingTrainer(state: GameState, choice: number): GameState {
+  const pending = state.pendingTrainer;
+  if (!pending) return state;
+  const active = state.activePlayer;
+  const opp = active === 'player1' ? 'player2' : 'player1';
+
+  const cleared = { ...state, pendingTrainer: undefined };
+
+  if (pending.type === 'energy-removal') {
+    const o = cleared[opp];
+    if (!o.active) return cleared;
+    const energies = o.active.attachedEnergy;
+    const idx = Math.max(0, Math.min(choice, energies.length - 1));
+    const removed = energies[idx];
+    if (!removed) return cleared;
+    const newEnergies = energies.filter((_, i) => i !== idx);
+    return log({ ...cleared, [opp]: { ...o, active: { ...o.active, attachedEnergy: newEnergies } } },
+      `${cleared[active].name} discards ${removed.type} Energy from ${o.active.card.name}!`);
+  }
+
+  if (pending.type === 'gust-of-wind') {
+    const o = cleared[opp];
+    const slot = choice;
+    if (slot < 0 || slot > 4 || !o.bench[slot]) return cleared;
+    const swapIn = o.bench[slot]!;
+    const newBench = [...o.bench];
+    newBench[slot] = o.active;
+    return log({ ...cleared, [opp]: { ...o, active: swapIn, bench: newBench } },
+      `${cleared[active].name} uses Gust of Wind! ${swapIn.card.name} is forced in!`);
+  }
+
+  if (pending.type === 'pokedex') {
+    return cleared;
+  }
+
+  return cleared;
 }
 
 // ─── evolve ──────────────────────────────────────────────────────────────────

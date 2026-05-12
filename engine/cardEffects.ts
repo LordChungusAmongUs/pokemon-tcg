@@ -312,17 +312,7 @@ export function handleTrainerEffect(
     return logMsg(after, `${playerName} draws 2 cards.`);
   }
 
-  // ── Energy Removal ────────────────────────────────────────────────────────
-  if (name === 'energy removal' || id === 'base1-92') {
-    const o = opp();
-    if (o.active && o.active.attachedEnergy.length > 0) {
-      const [removed, ...rest] = o.active.attachedEnergy;
-      const newOppActive = { ...o.active, attachedEnergy: rest };
-      after = logMsg({ ...after, [oppId]: { ...o, active: newOppActive } },
-        `${playerName} discards ${removed.type} Energy from ${o.active.card.name}!`);
-    }
-    return after;
-  }
+  // Energy Removal / Gust of Wind / Pokédex are intercepted in playTrainer before reaching here
 
   // ── Super Energy Removal ──────────────────────────────────────────────────
   if (name === 'super energy removal' || id === 'base1-79') {
@@ -345,19 +335,6 @@ export function handleTrainerEffect(
     return logMsg(after, `${playerName} plays Super Energy Removal! Discards 2 energy from ${o.active.card.name}.`);
   }
 
-  // ── Gust of Wind ──────────────────────────────────────────────────────────
-  if (name === 'gust of wind' || id === 'base1-93') {
-    const o = opp();
-    const benchIdx = o.bench.findIndex(b => b !== null);
-    if (o.active && benchIdx >= 0) {
-      const swapIn = o.bench[benchIdx]!;
-      const newBench = [...o.bench];
-      newBench[benchIdx] = o.active;
-      after = logMsg({ ...after, [oppId]: { ...o, active: swapIn, bench: newBench } },
-        `${playerName} uses Gust of Wind! ${swapIn.card.name} is forced in for ${o.active.card.name}.`);
-    }
-    return after;
-  }
 
   // ── Full Heal ─────────────────────────────────────────────────────────────
   if (name === 'full heal' || id === 'base1-82') {
@@ -613,11 +590,6 @@ export function handleTrainerEffect(
     return after;
   }
 
-  // ── Pokédex ───────────────────────────────────────────────────────────────
-  if (name === 'pokédex' || name === 'pokedex' || id === 'base1-87') {
-    // Simplified: look at top 5 cards and put them back in the same order
-    return logMsg(after, `${playerName} uses Pokédex to peek at the top of their deck.`);
-  }
 
   // ── Mr. Fuji ──────────────────────────────────────────────────────────────
   if (name === 'mr. fuji' || id === 'base3-58') {

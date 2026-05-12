@@ -5,7 +5,7 @@ import {
   initGame, confirmSetup, doDrawPhase, drawCard,
   playBasicToBench, playActiveFromBench,
   attachEnergy, retreat, attack,
-  endTurn, playTrainer, evolve,
+  endTurn, playTrainer, evolve, resolvePendingTrainer,
 } from '@/engine/GameEngine';
 import { XP_REWARDS } from '@/lib/progression';
 
@@ -38,6 +38,7 @@ interface GameStore {
   attackAction: (attackIndex: number) => void;
   endTurnAction: () => void;
   playTrainerAction: (handUid: string) => void;
+  resolveTrainerAction: (choice: number) => void;
   evolveAction: (handUid: string, targetUid: string) => void;
   confirmSetupAction: (activeUid: string, benchUids: string[]) => void;
 }
@@ -106,6 +107,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       selectedHandUid: null,
     }));
   },
+
+  resolveTrainerAction: (choice) => set(s => ({
+    game: s.game ? resolvePendingTrainer(s.game, choice) : null,
+  })),
 
   evolveAction: (handUid, targetUid) => {
     const g = get().game;

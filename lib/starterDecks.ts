@@ -5,6 +5,7 @@ export interface StarterDeck {
   name: string;
   description: string;
   type: string;
+  requiredSet: string; // highest-tier set used; 'Base' = always available
   cardIds: string[];
 }
 
@@ -53,6 +54,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: 'Fists & Fire',
     description: 'Base Set only. Machamp punishes with big Fighting damage; Charmander/Charmeleon build toward the fire side.',
     type: 'Fighting/Fire',
+    requiredSet: 'Base',
     cardIds: [
       // Pokémon (24)
       ...r('base1-47', 3), // Diglett
@@ -85,6 +87,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: 'Machamp Deck',
     description: 'The original 2-Player Starter Set fighting deck. Machamp hits hard; Psychic types provide backup.',
     type: 'Fighting/Psychic',
+    requiredSet: 'Base',
     cardIds: [
       ...r('base1-52', 4), // Machop
       ...r('base1-34', 3), // Machoke
@@ -113,6 +116,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: 'Zap!',
     description: 'Lightning/Psychic combo. Pikachu and Magnemite shock while Mewtwo, Haunter, and Jynx provide Psychic pressure.',
     type: 'Lightning/Psychic',
+    requiredSet: 'Base',
     cardIds: [
       ...r('base1-10', 1), // Mewtwo
       ...r('base1-32', 1), // Kadabra
@@ -138,6 +142,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: 'Overgrowth',
     description: 'Grass/Water hybrid. Bulbasaur line and Beedrill provide Grass punch; Gyarados and Starmie deliver Water firepower.',
     type: 'Grass/Water',
+    requiredSet: 'Base',
     cardIds: [
       ...r('base1-6',  1), // Gyarados
       ...r('base1-35', 2), // Magikarp
@@ -162,6 +167,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: 'Brushfire',
     description: 'Fire/Grass beatdown. Charmander line and Arcanine bring the heat while Weedle, Tangela, and Nidoran fill the bench.',
     type: 'Fire/Grass',
+    requiredSet: 'Base',
     cardIds: [
       ...r('base1-12', 1), // Ninetales
       ...r('base1-69', 4), // Weedle
@@ -188,6 +194,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: 'Blackout',
     description: 'Fighting/Water beatdown. Machop/Machoke grind opponents down while Squirtle/Staryu provide Water backup.',
     type: 'Fighting/Water',
+    requiredSet: 'Base',
     cardIds: [
       ...r('base1-7',  1), // Hitmonchan
       ...r('base2-27', 2), // Farfetch'd
@@ -213,6 +220,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: 'Power Reserve',
     description: 'Official WotC Jungle theme deck. Scyther, Snorlax, and Kangaskhan are unstoppable walls.',
     type: 'Grass/Colorless',
+    requiredSet: 'Jungle',
     cardIds: [
       // Pokemon (21)
       ...r('base2-10', 4), // Scyther
@@ -240,6 +248,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: 'Water Blast',
     description: 'Official WotC Jungle theme deck. Vaporeon and Seaking unleash a relentless watery assault.',
     type: 'Water/Grass',
+    requiredSet: 'Jungle',
     cardIds: [
       ...r('base2-51', 4), // Eevee
       ...r('base2-12', 2), // Vaporeon
@@ -269,6 +278,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: 'Bodyguard',
     description: 'Official WotC Fossil theme deck. Kabutops and Hitmonlee guard the bench with iron fists.',
     type: 'Fighting/Colorless',
+    requiredSet: 'Fossil',
     cardIds: [
       // Pokemon (22)
       ...r('base3-50', 4), // Kabuto
@@ -297,6 +307,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: 'Excavation',
     description: 'Official WotC Fossil theme deck. Gengar and Slowbro combine psychic power with Lapras bulk.',
     type: 'Psychic/Water',
+    requiredSet: 'Fossil',
     cardIds: [
       // Pokemon (22)
       ...r('base3-33', 4), // Gastly
@@ -328,6 +339,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: "Rocket's Trouble",
     description: "Official WotC Team Rocket theme deck. Dark Raichu and Dark Gyarados strike fast and hard.",
     type: 'Lightning/Water',
+    requiredSet: 'Team Rocket',
     cardIds: [
       ...r('base1-58', 4), // Pikachu
       ...r('base5-83', 2), // Dark Raichu
@@ -353,6 +365,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: "Rocket's Devastation",
     description: "Official WotC Team Rocket theme deck. Dark Alakazam and Dark Charizard bring overwhelming power.",
     type: 'Psychic/Fire',
+    requiredSet: 'Team Rocket',
     cardIds: [
       ...r('base1-43', 4), // Abra
       ...r('base1-32', 2), // Kadabra
@@ -380,6 +393,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: "Brock's Training",
     description: "Official WotC Gym Heroes theme deck. Boulder Badge Brock's Rock Pokémon outlast everything.",
     type: 'Fighting/Colorless',
+    requiredSet: 'Gym Heroes',
     cardIds: [
       ...r('base1-56', 4), // Onix
       ...r('gym1-21', 3), // Brock's Onix
@@ -403,6 +417,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: "Misty's Torrent",
     description: "Official WotC Gym Heroes theme deck. Misty's Water Pokémon wear down opponents wave by wave.",
     type: 'Water',
+    requiredSet: 'Gym Heroes',
     cardIds: [
       // Pokemon (22)
       ...r('gym1-30', 4), // Misty's Goldeen
@@ -430,6 +445,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: "Surge's Lightning",
     description: "Official WotC Gym Heroes theme deck. Lt. Surge's electric Pokémon shock opponents into submission.",
     type: 'Lightning',
+    requiredSet: 'Gym Heroes',
     cardIds: [
       // Pokemon (22)
       ...r('gym1-6',  2), // Lt. Surge's Electabuzz (holo)
@@ -459,6 +475,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: "Erika's Garden",
     description: "Official WotC Gym Heroes theme deck. Erika's Grass Pokémon heal and sap the opponent's strength.",
     type: 'Grass/Psychic',
+    requiredSet: 'Gym Heroes',
     cardIds: [
       // Pokemon (22)
       ...r('gym1-25', 3), // Erika's Clefairy
@@ -490,6 +507,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: "Blaine's Inferno",
     description: "Official WotC Gym Challenge theme deck. Blaine's Fire Pokémon keep the heat relentless.",
     type: 'Fire',
+    requiredSet: 'Gym Challenge',
     cardIds: [
       ...r('gym2-60', 4), // Blaine's Charmander
       ...r('gym2-62', 4), // Blaine's Growlithe
@@ -516,6 +534,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: "Giovanni's Ground",
     description: "Official WotC Gym Challenge theme deck. Giovanni's Ground Pokémon hit hard and survive hits.",
     type: 'Fighting/Colorless',
+    requiredSet: 'Gym Challenge',
     cardIds: [
       ...r('gym2-24', 3), // Giovanni's Pinsir
       ...r('gym2-43', 4), // Giovanni's Meowth
@@ -544,6 +563,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: "Koga's Poison",
     description: "Official WotC Gym Challenge theme deck. Koga's Poison Pokémon whittle down foes with status damage.",
     type: 'Psychic/Poison',
+    requiredSet: 'Gym Challenge',
     cardIds: [
       ...r('gym2-10', 2), // Koga's Ditto
       ...r('gym2-48', 4), // Koga's Koffing
@@ -570,6 +590,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     name: "Sabrina's Psychic",
     description: "Official WotC Gym Challenge theme deck. Sabrina's Psychic Pokémon confuse and overwhelm.",
     type: 'Psychic',
+    requiredSet: 'Gym Challenge',
     cardIds: [
       ...r('gym2-57', 3), // Sabrina's Jynx
       ...r('gym2-59', 2), // Sabrina's Mr. Mime
@@ -594,3 +615,14 @@ export const STARTER_DECKS: StarterDeck[] = [
     ],
   },
 ];
+
+// Returns all starter decks the AI is allowed to use given the player's collection.
+// Falls back to Base Set decks if nothing else qualifies.
+export function getAvailableAIDecks(
+  collection: Record<string, number>,
+  isSetUnlocked: (setName: string, collection: Record<string, number>) => boolean,
+): StarterDeck[] {
+  const available = STARTER_DECKS.filter(d => isSetUnlocked(d.requiredSet, collection));
+  if (available.length > 0) return available;
+  return STARTER_DECKS.filter(d => d.requiredSet === 'Base');
+}

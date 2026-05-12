@@ -3,18 +3,13 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useGameStore } from '@/store/gameStore';
 import type { CardData } from '@/engine/GameState';
-import { BASIC_ENERGY_CARDS, ALL_CARDS } from '@/lib/cardUtils';
-import { STARTER_DECKS } from '@/lib/starterDecks';
+import { BASIC_ENERGY_CARDS, ALL_CARDS, isSetUnlocked } from '@/lib/cardUtils';
+import { getAvailableAIDecks } from '@/lib/starterDecks';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { computeLevel } from '@/lib/progression';
 
 const BROWSE_CARDS = [...ALL_CARDS, ...BASIC_ENERGY_CARDS];
-
-function randomAiDeck(): CardData[] {
-  const deck = STARTER_DECKS[Math.floor(Math.random() * STARTER_DECKS.length)];
-  return deck.cardIds.map(id => BROWSE_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
-}
 
 interface LocalDeck { name: string; cardIds: string[]; }
 
@@ -27,7 +22,7 @@ function deckToCards(deck: LocalDeck): CardData[] {
 }
 
 export default function HomePage() {
-  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount, prereleaseInvites, freeVouchers } = useAuthStore();
+  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount, prereleaseInvites, freeVouchers, collection } = useAuthStore();
   const [localDecks, setLocalDecks] = useState<LocalDeck[]>([]);
   const [p1Deck, setP1Deck] = useState('');
   const [p2Deck, setP2Deck] = useState('');
@@ -61,7 +56,9 @@ export default function HomePage() {
     let cards2: CardData[];
     let p2NameFinal: string;
     if (mode === 'vs-ai') {
-      cards2 = randomAiDeck();
+      const availableDecks = getAvailableAIDecks(collection, isSetUnlocked);
+      const aiDeckDef = availableDecks[Math.floor(Math.random() * availableDecks.length)];
+      cards2 = aiDeckDef.cardIds.map(id => BROWSE_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
       p2NameFinal = 'CPU';
     } else {
       const d2 = allDecks.find(d => d.name === p2Deck);

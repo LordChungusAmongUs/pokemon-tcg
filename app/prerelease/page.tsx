@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useGameStore } from '@/store/gameStore';
-import { ALL_CARDS, BASIC_ENERGY_CARDS, isBasicPokemon } from '@/lib/cardUtils';
+import { ALL_CARDS, BASIC_ENERGY_CARDS, isBasicPokemon, isSetUnlocked } from '@/lib/cardUtils';
+import { getAvailableAIDecks } from '@/lib/starterDecks';
 import { pickPackCards, SET_PROGRESSION } from '@/lib/progression';
 import CardImage from '@/components/cards/CardImage';
 import type { CardData, EnergyType } from '@/engine/GameState';
@@ -37,7 +38,7 @@ function buildSealedDeck(opened: CardData[]): CardData[] {
 
 export default function PrereleasePage() {
   const router = useRouter();
-  const { user, prereleaseInvites, usePrereleaseInvite, addToCollection } = useAuthStore();
+  const { user, prereleaseInvites, usePrereleaseInvite, addToCollection, collection } = useAuthStore();
   const { startGame } = useGameStore();
 
   const [phase, setPhase] = useState<'list' | 'opening' | 'ready'>('list');
@@ -104,11 +105,11 @@ export default function PrereleasePage() {
   function startBattle() {
     if (!activeSet || openedCards.length === 0) return;
 
-    // Build AI deck from a random starter
-    const { STARTER_DECKS } = require('@/lib/starterDecks');
-    const aiDeckDef = STARTER_DECKS[Math.floor(Math.random() * STARTER_DECKS.length)];
-    const aiDeck = (aiDeckDef.cardIds as string[])
-      .map((id: string) => BROWSE_CARDS.find(c => c.id === id))
+    // Build AI deck from a random unlocked starter
+    const availableDecks = getAvailableAIDecks(collection, isSetUnlocked);
+    const aiDeckDef = availableDecks[Math.floor(Math.random() * availableDecks.length)];
+    const aiDeck = aiDeckDef.cardIds
+      .map(id => BROWSE_CARDS.find(c => c.id === id))
       .filter(Boolean) as CardData[];
 
     const playerDeck = buildSealedDeck(openedCards);

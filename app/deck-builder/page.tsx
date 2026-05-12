@@ -131,6 +131,12 @@ export default function DeckBuilderPage() {
     setEditingDeckId(undefined);
   }
 
+  function handleDeleteLocal(name: string) {
+    const updated = localDecks.filter(d => d.name !== name);
+    localStorage.setItem('pokemon-tcg-decks', JSON.stringify(updated));
+    setLocalDecks(updated);
+  }
+
   const deckCounts = deck.reduce((acc, c) => {
     acc[c.id] = (acc[c.id] || 0) + 1;
     return acc;
@@ -314,13 +320,20 @@ export default function DeckBuilderPage() {
             <p className="text-xs text-gray-400 mb-1">Saved Decks</p>
             <div className="space-y-1">
               {localDecks.map(d => (
-                <button
-                  key={d.name}
-                  onClick={() => handleLoadLocal(d)}
-                  className="w-full text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded text-sm"
-                >
-                  {d.name} ({d.cardIds.length})
-                </button>
+                <div key={d.name} className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleLoadLocal(d)}
+                    className="flex-1 text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded text-sm"
+                  >
+                    {d.name} ({d.cardIds.length})
+                  </button>
+                  <button
+                    onClick={() => handleDeleteLocal(d.name)}
+                    className="text-red-400 hover:text-red-300 text-xs px-1"
+                  >
+                    ×
+                  </button>
+                </div>
               ))}
             </div>
           </div>

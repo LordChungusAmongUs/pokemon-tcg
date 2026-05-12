@@ -16,7 +16,7 @@ const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl']);
 const SHOP_SETS = SET_PROGRESSION.filter(s => !EXCLUDED.has(s.name));
 
 export default function ShopPage() {
-  const { user, profile, addCredits, addToCollection, collection, freeVouchers, redeemVoucher } = useAuthStore();
+  const { user, profile, addCredits, addToCollection, collection, freeVouchers, redeemVoucher, saveDeck, isLocalGuest } = useAuthStore();
   const [packResult, setPackResult] = useState<CardData[]>([]);
   const [packLabel, setPackLabel] = useState('');
   const [tab, setTab] = useState<'packs' | 'decks' | 'singles'>('packs');
@@ -66,6 +66,45 @@ export default function ShopPage() {
     setPackLabel(`${count === 1 ? '1 Pack' : `${count} Packs`} — ${setName}`);
   }
 
+  function saveThemeDeckToBuilder(sd: typeof STARTER_DECKS[0]) {
+    if (user && !isLocalGuest) {
+      saveDeck(sd.name, sd.cardIds);
+    } else {
+      try {
+        const key = 'pokemon-tcg-decks';
+        const all: { name: string; cardIds: string[] }[] = JSON.parse(localStorage.getItem(key) || '[]');
+        if (!all.find(d => d.name === sd.name)) {
+          all.push({ name: sd.name, cardIds: sd.cardIds });
+          localStorage.setItem(key, JSON.stringify(all));
+        }
+      } catch {}
+    }
+  }
+
+  function showDeckCards(sd: typeof STARTER_DECKS[0], label: string) {
+    const nonEnergyIds = sd.cardIds.filter(id => !id.startsWith('basic-'));
+    const cards = nonEnergyIds.map(id => ALL_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
+    setPackResult(cards);
+    setPackLabel(label);
+  }
+
+  async function handleBuyDeck(sd: typeof STARTER_DECKS[0]) {
+    if (!user) { alert('Sign in to buy decks!'); return; }
+    if (credits < THEME_DECK_COST) { alert('Not enough credits!'); return; }
+    await addCredits(-THEME_DECK_COST);
+    addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
+    saveThemeDeckToBuilder(sd);
+    showDeckCards(sd, `${sd.name} — Theme Deck`);
+  }
+
+  function handleRedeemVoucher(sd: typeof STARTER_DECKS[0]) {
+    if (!user) { alert('Sign in first!'); return; }
+    redeemVoucher(freeVouchers[0]);
+    addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
+    saveThemeDeckToBuilder(sd);
+    showDeckCards(sd, `🎟 ${sd.name} — Voucher Redeemed`);
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 text-white p-4">
       {/* Pack result overlay */}
@@ -85,7 +124,7 @@ export default function ShopPage() {
               onClick={() => setPackResult([])}
               className="mt-4 w-full py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl"
             >
-              Collect Cards
+              {packLabel.includes('Theme Deck') || packLabel.includes('Voucher') ? '✅ Take Deck' : '✅ Collect Cards'}
             </button>
           </div>
         </div>
@@ -253,49 +292,27 @@ export default function ShopPage() {
         {tab === 'decks' && (() => {
           const starterDeck = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
           const themeDecks  = STARTER_DECKS.filter(d => d.id !== 'custom-fists-and-fire');
+          const hasVoucher  = freeVouchers.length > 0;
 
-          function DeckButtons({ sd }: { sd: typeof STARTER_DECKS[0] }) {
-            // Find which set this deck belongs to — check if any voucher covers it
-            const matchingVoucher = freeVouchers.find(v =>
-              sd.cardIds.some(id => {
-                const card = [...(typeof window !== 'undefined' ? [] : [])];
-                void card;
-                return id.startsWith('base') && id.split('-')[0];
-              })
-            ) ?? null;
-            // Simpler: any voucher can redeem any theme deck (player chooses which deck to use it on)
-            const hasAnyVoucher = freeVouchers.length > 0;
-            return (
-              <div className="space-y-1.5">
-                {hasAnyVoucher && (
-                  <button
-                    onClick={() => {
-                      if (!user) { alert('Sign in first!'); return; }
-                      redeemVoucher(freeVouchers[0]);
-                      addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
-                      alert(`🎟 Voucher used! ${sd.name} added to your collection!`);
-                    }}
-                    className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-lg"
-                  >
-                    🎟 Redeem Free Voucher ({freeVouchers.length} left)
-                  </button>
-                )}
+          const DeckButtons = (sd: typeof STARTER_DECKS[0]) => (
+            <div className="space-y-1.5">
+              {hasVoucher && (
                 <button
-                  onClick={async () => {
-                    if (!user) { alert('Sign in to buy decks!'); return; }
-                    if (credits < THEME_DECK_COST) { alert('Not enough credits!'); return; }
-                    await addCredits(-THEME_DECK_COST);
-                    addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
-                    alert(`${sd.name} added to your collection!`);
-                  }}
-                  disabled={credits < THEME_DECK_COST || !user}
-                  className="w-full py-1.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-bold rounded-lg"
+                  onClick={() => handleRedeemVoucher(sd)}
+                  className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-lg"
                 >
-                  {!user ? 'Sign in to buy' : credits < THEME_DECK_COST ? 'Not enough credits' : 'Buy Deck'}
+                  🎟 Redeem Free Voucher ({freeVouchers.length} left)
                 </button>
-              </div>
-            );
-          }
+              )}
+              <button
+                onClick={() => handleBuyDeck(sd)}
+                disabled={credits < THEME_DECK_COST || !user}
+                className="w-full py-1.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-bold rounded-lg"
+              >
+                {!user ? 'Sign in to buy' : credits < THEME_DECK_COST ? 'Not enough credits' : `Buy Deck — ${THEME_DECK_COST} cr`}
+              </button>
+            </div>
+          );
 
           return (
             <div className="space-y-5">
@@ -310,13 +327,9 @@ export default function ShopPage() {
                     </div>
                     <div className="text-sm text-gray-400 mb-3">{starterDeck.description}</div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-yellow-400 text-sm font-bold">{THEME_DECK_COST} credits</span>
-                      <span className="text-xs text-gray-500">{starterDeck.cardIds.length} cards</span>
+                      <span className="text-xs text-gray-500">{starterDeck.cardIds.filter(id => !id.startsWith('basic-')).length} collectible cards</span>
                     </div>
-                    <DeckButtons sd={starterDeck} />
-                    <Link href="/deck-builder" className="mt-2 block text-center py-1 text-xs text-gray-400 hover:text-white">
-                      Use in Builder →
-                    </Link>
+                    {DeckButtons(starterDeck)}
                   </div>
                 </div>
               )}
@@ -324,20 +337,15 @@ export default function ShopPage() {
               {/* ── Theme Decks ───────────────────────────────── */}
               <div>
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Theme Decks</h3>
-                <p className="text-xs text-gray-500 mb-3">Each costs {THEME_DECK_COST} credits.</p>
+                <p className="text-xs text-gray-500 mb-3">Each costs {THEME_DECK_COST} credits. Cards added to collection + deck saved to builder.</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {themeDecks.map(sd => (
                     <div key={sd.id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-                      <div className="font-bold mb-1">{sd.name}</div>
+                      <div className="font-bold mb-0.5">{sd.name}</div>
+                      <div className="text-xs text-gray-500 mb-1">{sd.type}</div>
                       <div className="text-sm text-gray-400 mb-3">{sd.description}</div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-yellow-400 text-sm font-bold">{THEME_DECK_COST} credits</span>
-                        <span className="text-xs text-gray-500">{sd.cardIds.length} cards</span>
-                      </div>
-                      <DeckButtons sd={sd} />
-                      <Link href="/deck-builder" className="mt-2 block text-center py-1 text-xs text-gray-400 hover:text-white">
-                        Use in Builder →
-                      </Link>
+                      <div className="text-xs text-gray-500 mb-2">{sd.cardIds.filter(id => !id.startsWith('basic-')).length} collectible cards</div>
+                      {DeckButtons(sd)}
                     </div>
                   ))}
                 </div>

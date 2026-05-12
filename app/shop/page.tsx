@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/authStore';
 import { ALL_CARDS, isSetUnlocked, setCompletionPct } from '@/lib/cardUtils';
 import {
   SET_PROGRESSION, PACK_COST, PACK_BUNDLE_5, PACK_BUNDLE_10,
-  THEME_DECK_COST, pickPackCards, singleCost,
+  THEME_DECK_COST, pickPackCards, singleCost, VOUCHER_THRESHOLD, UNLOCK_THRESHOLD,
 } from '@/lib/progression';
 import { STARTER_DECKS } from '@/lib/starterDecks';
 import CardImage from '@/components/cards/CardImage';
@@ -16,7 +16,7 @@ const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl']);
 const SHOP_SETS = SET_PROGRESSION.filter(s => !EXCLUDED.has(s.name));
 
 export default function ShopPage() {
-  const { user, profile, addCredits, addToCollection, collection } = useAuthStore();
+  const { user, profile, addCredits, addToCollection, collection, freeVouchers, redeemVoucher } = useAuthStore();
   const [packResult, setPackResult] = useState<CardData[]>([]);
   const [packLabel, setPackLabel] = useState('');
   const [tab, setTab] = useState<'packs' | 'decks' | 'singles'>('packs');
@@ -32,7 +32,7 @@ export default function ShopPage() {
     if (!isSetUnlocked(setName, collection)) {
       const entry = SET_PROGRESSION.find(s => s.name === setName);
       const pct = Math.round(setCompletionPct(entry?.prerequisite ?? '', collection) * 100);
-      alert(`Complete 60% of ${entry?.prerequisite} to unlock this set (you have ${pct}%).`);
+      alert(`Complete 75% of ${entry?.prerequisite} to unlock this set (you have ${pct}%).`);
       return;
     }
 
@@ -136,6 +136,9 @@ export default function ShopPage() {
               {SHOP_SETS.map(({ name, prerequisite }) => {
                 const unlocked = isSetUnlocked(name, collection);
                 const pct = prerequisite ? Math.round(setCompletionPct(prerequisite, collection) * 100) : 100;
+                const voucherPct = Math.round(VOUCHER_THRESHOLD * 100);
+                const unlockPct = Math.round(UNLOCK_THRESHOLD * 100);
+                const hasVoucher = freeVouchers.includes(name);
                 return (
                   <div
                     key={name}
@@ -144,17 +147,25 @@ export default function ShopPage() {
                     }`}
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <div>
+                      <div className="flex-1">
                         <div className="font-bold text-sm">{name}</div>
                         {!unlocked && prerequisite && (
-                          <div className="text-xs text-yellow-500 mt-0.5">
-                            🔒 Complete {prerequisite} ({pct}% / 60%)
-                          </div>
+                          <>
+                            <div className="text-xs text-yellow-500 mt-0.5">
+                              🔒 {prerequisite}: {pct}% / {unlockPct}% to unlock
+                            </div>
+                            {pct < voucherPct && (
+                              <div className="text-[10px] text-gray-500 mt-0.5">
+                                At {voucherPct}%: free deck voucher + prerelease invite
+                              </div>
+                            )}
+                          </>
                         )}
                         {unlocked && prerequisite && (
-                          <div className="text-xs text-green-500 mt-0.5">
-                            ✓ {prerequisite} completed
-                          </div>
+                          <div className="text-xs text-green-500 mt-0.5">✓ Unlocked</div>
+                        )}
+                        {hasVoucher && (
+                          <div className="text-xs text-purple-400 mt-0.5">🎟 Free deck voucher available!</div>
                         )}
                       </div>
                     </div>
@@ -243,21 +254,46 @@ export default function ShopPage() {
           const starterDeck = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
           const themeDecks  = STARTER_DECKS.filter(d => d.id !== 'custom-fists-and-fire');
 
-          function BuyDeckButton({ sd }: { sd: typeof STARTER_DECKS[0] }) {
+          function DeckButtons({ sd }: { sd: typeof STARTER_DECKS[0] }) {
+            // Find which set this deck belongs to — check if any voucher covers it
+            const matchingVoucher = freeVouchers.find(v =>
+              sd.cardIds.some(id => {
+                const card = [...(typeof window !== 'undefined' ? [] : [])];
+                void card;
+                return id.startsWith('base') && id.split('-')[0];
+              })
+            ) ?? null;
+            // Simpler: any voucher can redeem any theme deck (player chooses which deck to use it on)
+            const hasAnyVoucher = freeVouchers.length > 0;
             return (
-              <button
-                onClick={async () => {
-                  if (!user) { alert('Sign in to buy decks!'); return; }
-                  if (credits < THEME_DECK_COST) { alert('Not enough credits!'); return; }
-                  await addCredits(-THEME_DECK_COST);
-                  addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
-                  alert(`${sd.name} added to your collection!`);
-                }}
-                disabled={credits < THEME_DECK_COST || !user}
-                className="w-full py-1.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-bold rounded-lg"
-              >
-                {!user ? 'Sign in to buy' : credits < THEME_DECK_COST ? 'Not enough credits' : 'Buy Deck'}
-              </button>
+              <div className="space-y-1.5">
+                {hasAnyVoucher && (
+                  <button
+                    onClick={() => {
+                      if (!user) { alert('Sign in first!'); return; }
+                      redeemVoucher(freeVouchers[0]);
+                      addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
+                      alert(`🎟 Voucher used! ${sd.name} added to your collection!`);
+                    }}
+                    className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-lg"
+                  >
+                    🎟 Redeem Free Voucher ({freeVouchers.length} left)
+                  </button>
+                )}
+                <button
+                  onClick={async () => {
+                    if (!user) { alert('Sign in to buy decks!'); return; }
+                    if (credits < THEME_DECK_COST) { alert('Not enough credits!'); return; }
+                    await addCredits(-THEME_DECK_COST);
+                    addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
+                    alert(`${sd.name} added to your collection!`);
+                  }}
+                  disabled={credits < THEME_DECK_COST || !user}
+                  className="w-full py-1.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-bold rounded-lg"
+                >
+                  {!user ? 'Sign in to buy' : credits < THEME_DECK_COST ? 'Not enough credits' : 'Buy Deck'}
+                </button>
+              </div>
             );
           }
 
@@ -277,7 +313,7 @@ export default function ShopPage() {
                       <span className="text-yellow-400 text-sm font-bold">{THEME_DECK_COST} credits</span>
                       <span className="text-xs text-gray-500">{starterDeck.cardIds.length} cards</span>
                     </div>
-                    <BuyDeckButton sd={starterDeck} />
+                    <DeckButtons sd={starterDeck} />
                     <Link href="/deck-builder" className="mt-2 block text-center py-1 text-xs text-gray-400 hover:text-white">
                       Use in Builder →
                     </Link>
@@ -298,7 +334,7 @@ export default function ShopPage() {
                         <span className="text-yellow-400 text-sm font-bold">{THEME_DECK_COST} credits</span>
                         <span className="text-xs text-gray-500">{sd.cardIds.length} cards</span>
                       </div>
-                      <BuyDeckButton sd={sd} />
+                      <DeckButtons sd={sd} />
                       <Link href="/deck-builder" className="mt-2 block text-center py-1 text-xs text-gray-400 hover:text-white">
                         Use in Builder →
                       </Link>

@@ -27,7 +27,7 @@ function deckToCards(deck: LocalDeck): CardData[] {
 }
 
 export default function HomePage() {
-  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount } = useAuthStore();
+  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount, prereleaseInvites, freeVouchers } = useAuthStore();
   const [localDecks, setLocalDecks] = useState<LocalDeck[]>([]);
   const [p1Deck, setP1Deck] = useState('');
   const [p2Deck, setP2Deck] = useState('');
@@ -147,6 +147,28 @@ export default function HomePage() {
               <div className="text-xs text-gray-400">Save progress</div>
             </Link>
           )}
+          <Link href="/prerelease"
+            className={`relative rounded-2xl p-4 text-center transition-all col-span-2 ${
+              prereleaseInvites.length > 0
+                ? 'bg-purple-600 hover:bg-purple-500 text-white'
+                : 'bg-white/10 hover:bg-white/20'
+            }`}
+          >
+            {prereleaseInvites.length > 0 && (
+              <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {prereleaseInvites.length}
+              </span>
+            )}
+            <div className="text-3xl">🎟</div>
+            <div className="font-semibold mt-1">Prerelease</div>
+            <div className="text-xs text-gray-300">
+              {prereleaseInvites.length > 0
+                ? `${prereleaseInvites.length} invite${prereleaseInvites.length > 1 ? 's' : ''} waiting!`
+                : freeVouchers.length > 0
+                ? `${freeVouchers.length} deck voucher${freeVouchers.length > 1 ? 's' : ''} in Shop`
+                : 'Complete 60% of any set'}
+            </div>
+          </Link>
         </div>
 
         {/* Game setup */}

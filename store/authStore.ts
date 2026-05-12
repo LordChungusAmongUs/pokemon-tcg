@@ -3,7 +3,8 @@ import { create } from 'zustand';
 import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import type { Profile, Deck } from '@/types/database';
-import { computeLevel, CREDIT_REWARDS, STARTING_CREDITS } from '@/lib/progression';
+import { computeLevel, CREDIT_REWARDS, STARTING_CREDITS, VOUCHER_THRESHOLD, SET_PROGRESSION } from '@/lib/progression';
+import { setCompletionPct } from '@/lib/cardUtils';
 import { STARTER_DECKS } from '@/lib/starterDecks';
 
 const LOCAL_GUEST_KEY = 'pokemon-tcg-guest';
@@ -33,6 +34,30 @@ function loadEncounteredFromStorage(userId: string): Set<string> {
 }
 function saveEncounteredToStorage(userId: string, e: Set<string>) {
   try { localStorage.setItem(encounteredKey(userId), JSON.stringify([...e])); } catch {}
+}
+
+function milestonesKey(userId: string) { return `pokemon-tcg-milestones-${userId}`; }
+function loadMilestones(userId: string): Set<string> {
+  try { const r = localStorage.getItem(milestonesKey(userId)); return r ? new Set(JSON.parse(r)) : new Set(); } catch { return new Set(); }
+}
+function saveMilestones(userId: string, m: Set<string>) {
+  try { localStorage.setItem(milestonesKey(userId), JSON.stringify([...m])); } catch {}
+}
+
+function vouchersKey(userId: string) { return `pokemon-tcg-vouchers-${userId}`; }
+function loadVouchers(userId: string): string[] {
+  try { const r = localStorage.getItem(vouchersKey(userId)); return r ? JSON.parse(r) : []; } catch { return []; }
+}
+function saveVouchers(userId: string, v: string[]) {
+  try { localStorage.setItem(vouchersKey(userId), JSON.stringify(v)); } catch {}
+}
+
+function prereleaseKey(userId: string) { return `pokemon-tcg-prerelease-${userId}`; }
+function loadPrereleaseInvites(userId: string): string[] {
+  try { const r = localStorage.getItem(prereleaseKey(userId)); return r ? JSON.parse(r) : []; } catch { return []; }
+}
+function savePrereleaseInvites(userId: string, p: string[]) {
+  try { localStorage.setItem(prereleaseKey(userId), JSON.stringify(p)); } catch {}
 }
 
 function starterGivenKey(userId: string) { return `pokemon-tcg-starter-${userId}`; }
@@ -90,6 +115,8 @@ interface AuthStore {
   isLocalGuest: boolean;
   collection: Record<string, number>; // card_id → quantity owned
   encountered: Set<string>;           // card_ids seen in matches
+  freeVouchers: string[];             // set names with unclaimed deck vouchers
+  prereleaseInvites: string[];        // set names with unused prerelease invites
   init: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInAsGuest: () => Promise<void>;
@@ -105,6 +132,9 @@ interface AuthStore {
   addToCollection: (cardIds: string[]) => void;
   addEncountered: (cardIds: string[]) => void;
   ensureStarterDeck: () => void;
+  checkMilestones: () => void;
+  redeemVoucher: (setName: string) => void;
+  usePrereleaseInvite: (setName: string) => void;
   resetAccount: () => Promise<void>;
 }
 
@@ -116,6 +146,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   isLocalGuest: false,
   collection: {},
   encountered: new Set<string>(),
+  freeVouchers: [],
+  prereleaseInvites: [],
 
   init: async () => {
     // Restore local guest session first (works without any Supabase setup)
@@ -127,9 +159,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       if (isEmpty) saveLocalGuest(profile);
       const collection = loadCollectionFromStorage(LOCAL_GUEST_ID);
       const encountered = loadEncounteredFromStorage(LOCAL_GUEST_ID);
-      set({ user: fakeUser(), profile, isLocalGuest: true, loading: false, collection, encountered });
+      set({
+        user: fakeUser(), profile, isLocalGuest: true, loading: false, collection, encountered,
+        freeVouchers: loadVouchers(LOCAL_GUEST_ID),
+        prereleaseInvites: loadPrereleaseInvites(LOCAL_GUEST_ID),
+      });
       get().ensureStarterDeck();
       get().claimDailyCredits();
+      get().checkMilestones();
       return;
     }
 
@@ -161,9 +198,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           set({
             collection: loadCollectionFromStorage(u.id),
             encountered: loadEncounteredFromStorage(u.id),
+            freeVouchers: loadVouchers(u.id),
+            prereleaseInvites: loadPrereleaseInvites(u.id),
           });
           get().ensureStarterDeck();
           get().claimDailyCredits();
+          get().checkMilestones();
         } else {
           set({ profile: null, decks: [], collection: {}, encountered: new Set() });
         }
@@ -364,6 +404,56 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const storageId = get().isLocalGuest ? LOCAL_GUEST_ID : user.id;
     saveCollectionToStorage(storageId, updated);
     set({ collection: updated });
+    // Check if any milestones are newly reached
+    get().checkMilestones();
+  },
+
+  checkMilestones: () => {
+    const { user, collection, isLocalGuest, freeVouchers, prereleaseInvites } = get();
+    if (!user) return;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    const claimed = loadMilestones(storageId);
+    const newVouchers = [...freeVouchers];
+    const newInvites = [...prereleaseInvites];
+    let changed = false;
+
+    for (const entry of SET_PROGRESSION) {
+      if (!entry.prerequisite) continue;
+      const key = `${entry.name}-60`;
+      if (claimed.has(key)) continue;
+      const pct = setCompletionPct(entry.prerequisite, collection);
+      if (pct >= VOUCHER_THRESHOLD) {
+        claimed.add(key);
+        if (!newVouchers.includes(entry.name)) newVouchers.push(entry.name);
+        if (!newInvites.includes(entry.name)) newInvites.push(entry.name);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      saveMilestones(storageId, claimed);
+      saveVouchers(storageId, newVouchers);
+      savePrereleaseInvites(storageId, newInvites);
+      set({ freeVouchers: newVouchers, prereleaseInvites: newInvites });
+    }
+  },
+
+  redeemVoucher: (setName: string) => {
+    const { user, isLocalGuest, freeVouchers } = get();
+    if (!user) return;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    const updated = freeVouchers.filter(s => s !== setName);
+    saveVouchers(storageId, updated);
+    set({ freeVouchers: updated });
+  },
+
+  usePrereleaseInvite: (setName: string) => {
+    const { user, isLocalGuest, prereleaseInvites } = get();
+    if (!user) return;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    const updated = prereleaseInvites.filter(s => s !== setName);
+    savePrereleaseInvites(storageId, updated);
+    set({ prereleaseInvites: updated });
   },
 
   addEncountered: (cardIds: string[]) => {

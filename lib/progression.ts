@@ -67,6 +67,9 @@ export const SET_PROGRESSION: Array<{ name: string; prerequisite: string | null 
   { name: 'FireRed & LeafGreen',     prerequisite: 'Hidden Legends' },
 ];
 
+export const VOUCHER_THRESHOLD  = 0.60; // hit this → free deck voucher + prerelease invite
+export const UNLOCK_THRESHOLD   = 0.75; // hit this → next set packs become purchasable
+
 export const PACK_COST = 30;
 export const PACK_BUNDLE_5 = 125;
 export const PACK_BUNDLE_10 = 250;

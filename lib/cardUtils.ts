@@ -177,7 +177,7 @@ export function isSetUnlocked(setName: string, collection: Record<string, number
   const prereqCards = ALL_CARDS.filter(c => c.set === entry.prerequisite);
   if (prereqCards.length === 0) return true;
   const ownedCount = prereqCards.filter(c => (collection[c.id] ?? 0) > 0).length;
-  return ownedCount / prereqCards.length >= 0.6;
+  return ownedCount / prereqCards.length >= 0.75;
 }
 
 export function setCompletionPct(setName: string, collection: Record<string, number>): number {

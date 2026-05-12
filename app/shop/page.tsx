@@ -187,8 +187,7 @@ export default function ShopPage() {
           const singlesPool = ALL_CARDS.filter(c => !EXCLUDED.has(c.set) && isSetUnlocked(c.set ?? '', collection));
           const setSingles = singlesSet === 'All' ? singlesPool : singlesPool.filter(c => c.set === singlesSet);
           const displayed = setSingles
-            .filter(c => !singlesSearch || c.name.toLowerCase().includes(singlesSearch.toLowerCase()))
-            .slice(0, 60);
+            .filter(c => !singlesSearch || c.name.toLowerCase().includes(singlesSearch.toLowerCase()));
           const singleSets = ['All', ...Array.from(new Set(singlesPool.map(c => c.set))).sort()];
 
           async function buySingle(card: CardData) {

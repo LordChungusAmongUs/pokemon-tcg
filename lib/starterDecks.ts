@@ -24,6 +24,7 @@ const SWITCH      = 'base1-95';
 const PLUSPOWER   = 'base1-84';
 const GOW         = 'base1-93'; // Gust of Wind
 const ENERGY_REM  = 'base1-92'; // Energy Removal
+const SUPER_E_REM = 'base1-79'; // Super Energy Removal
 const ENERGY_RET  = 'base1-81'; // Energy Retrieval
 const POKEDEX     = 'base1-87'; // Pokédex
 const SUPER_POT   = 'base1-90'; // Super Potion
@@ -110,25 +111,26 @@ export const STARTER_DECKS: StarterDeck[] = [
   {
     id: 'starter-zap',
     name: 'Zap!',
-    description: 'Official WotC theme deck. Zapdos and Electabuzz keep up constant electric pressure.',
-    type: 'Lightning',
+    description: 'Lightning/Psychic combo. Pikachu and Magnemite shock while Mewtwo, Haunter, and Jynx provide Psychic pressure.',
+    type: 'Lightning/Psychic',
     cardIds: [
-      ...r('base1-16', 2), // Zapdos
-      ...r('base1-20', 4), // Electabuzz
+      ...r('base1-10', 1), // Mewtwo
+      ...r('base1-32', 1), // Kadabra
+      ...r('base1-31', 2), // Jynx
+      ...r('base1-29', 2), // Haunter
+      ...r('base1-50', 3), // Gastly
+      ...r('base1-43', 3), // Abra
       ...r('base1-58', 4), // Pikachu
-      ...r('base1-14', 2), // Raichu
-      ...r('base1-53', 4), // Magnemite
-      ...r('base1-9',  2), // Magneton
-      ...r('base1-67', 2), // Voltorb
-      ...r('base1-21', 2), // Electrode
-      ...r(BILL,        2),
-      ...r(OAK,         2),
-      ...r(POTION,      3),
+      ...r('base1-53', 3), // Magnemite
+      ...r(COMPUTER_S,  1),
+      ...r(SUPER_POT,   1),
+      ...r(OAK,         1),
       ...r(SWITCH,      2),
+      ...r(POTION,      1),
       ...r(GOW,         2),
-      ...r(PLUSPOWER,   2),
-      ...r(E_LIGHTNING, 21),
-      ...r(DCE,          4),
+      ...r(BILL,        2),
+      ...r(E_LIGHTNING, 12),
+      ...r(E_PSYCHIC,  16),
     ],
   },
   {
@@ -181,27 +183,24 @@ export const STARTER_DECKS: StarterDeck[] = [
   {
     id: 'starter-blackout',
     name: 'Blackout',
-    description: 'Official WotC theme deck. Blastoise and Poliwrath dominate with Water; Machamp closes games.',
-    type: 'Water/Fighting',
+    description: 'Fighting/Water beatdown. Machop/Machoke grind opponents down while Squirtle/Staryu provide Water backup.',
+    type: 'Fighting/Water',
     cardIds: [
+      ...r('base1-7',  1), // Hitmonchan
+      ...r('base2-27', 2), // Farfetch'd
+      ...r('base1-42', 2), // Wartortle
       ...r('base1-63', 4), // Squirtle
-      ...r('base1-42', 3), // Wartortle
-      ...r('base1-2',  2), // Blastoise
-      ...r('base1-59', 4), // Poliwag
-      ...r('base1-38', 3), // Poliwhirl
-      ...r('base1-13', 2), // Poliwrath
-      ...r('base1-52', 3), // Machop
-      ...r('base1-34', 1), // Machoke
-      ...r('base1-8',  1), // Machamp
-      ...r('base1-7',  2), // Hitmonchan
-      ...r(BILL,        2),
-      ...r(OAK,         2),
-      ...r(POTION,      3),
-      ...r(SWITCH,      2),
-      ...r(GOW,         2),
-      ...r(E_WATER,    14),
-      ...r(E_FIGHTING,  6),
-      ...r(DCE,         4),
+      ...r('base1-65', 3), // Staryu
+      ...r('base1-56', 3), // Onix
+      ...r('base1-62', 3), // Sandshrew
+      ...r('base1-34', 2), // Machoke
+      ...r('base1-52', 4), // Machop
+      ...r(SUPER_E_REM, 1),
+      ...r(PLUSPOWER,   1),
+      ...r(OAK,         1),
+      ...r(ENERGY_REM,  4),
+      ...r(E_FIGHTING, 16),
+      ...r(E_WATER,    12),
     ],
   },
 

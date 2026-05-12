@@ -9,8 +9,8 @@ function delay(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
 
-function randomDelay(): Promise<void> {
-  return delay(800 + Math.random() * 400);
+function lastLog(state: GameState): string {
+  return state.log[state.log.length - 1] ?? 'CPU took an action';
 }
 
 function findBestAttack(pokemon: InPlayPokemon): number {
@@ -49,7 +49,14 @@ function findBestEnergyTarget(player: PlayerState): string | null {
 export async function runAITurn(
   getState: () => GameState,
   setState: (s: GameState) => void,
+  onAction?: (message: string) => Promise<void>,
 ): Promise<void> {
+  const ack = async (state: GameState) => {
+    await delay(150); // let UI render first
+    if (onAction) await onAction(lastLog(state));
+    else await delay(800 + Math.random() * 400);
+  };
+
   let state = getState();
   if (state.phase === 'gameover') return;
 
@@ -57,7 +64,7 @@ export async function runAITurn(
   if (state.phase === 'draw') {
     state = doDrawPhase(state);
     setState(state);
-    await randomDelay();
+    await ack(state);
   }
 
   if (state.phase !== 'main' || state.activePlayer !== 'player2') return;
@@ -71,7 +78,7 @@ export async function runAITurn(
     if (emptySlot < 0) break;
     state = playBasicToBench(state, card.uid, emptySlot);
     setState(state);
-    await randomDelay();
+    await ack(state);
     if (state.phase === 'gameover') return;
   }
 
@@ -79,7 +86,6 @@ export async function runAITurn(
   if (!state.player2.active) {
     const firstBench = state.player2.bench.findIndex(b => b !== null);
     if (firstBench >= 0) {
-      // Promote by "retreating" — just directly move bench to active
       const pokemon = state.player2.bench[firstBench]!;
       const newBench = [...state.player2.bench];
       newBench[firstBench] = null;
@@ -89,7 +95,7 @@ export async function runAITurn(
         log: [...state.log, `${state.player2.name} sends out ${pokemon.card.name}!`],
       };
       setState(state);
-      await randomDelay();
+      await ack(state);
     }
   }
 
@@ -101,7 +107,7 @@ export async function runAITurn(
       state = playTrainer(state, card.uid);
       if (state.pendingTrainer) state = resolvePendingTrainer(state, 0);
       setState(state);
-      await randomDelay();
+      await ack(state);
       if (state.phase === 'gameover') return;
     }
   }
@@ -113,7 +119,7 @@ export async function runAITurn(
     if (target) {
       state = attachEnergy(state, energyCard.uid, target);
       setState(state);
-      await randomDelay();
+      await ack(state);
     }
   }
 
@@ -126,7 +132,7 @@ export async function runAITurn(
       if (name.includes('potion') || name.includes('full heal')) {
         state = playTrainer(state, card.uid);
         setState(state);
-        await randomDelay();
+        await ack(state);
       }
     }
   }
@@ -137,7 +143,7 @@ export async function runAITurn(
     if (bestAtk >= 0) {
       state = attack(state, bestAtk);
       setState(state);
-      await randomDelay();
+      await ack(state);
       if (state.phase === 'gameover') return;
     }
   }
@@ -155,7 +161,7 @@ export async function runAITurn(
       if (slot >= 0 && active.attachedEnergy.length >= active.card.retreatCost.length) {
         state = retreat(state, slot);
         setState(state);
-        await randomDelay();
+        await ack(state);
       }
     }
   }

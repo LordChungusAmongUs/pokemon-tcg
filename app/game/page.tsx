@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import InPlayCard from '@/components/board/InPlayCard';
 import EmptySlot from '@/components/board/EmptySlot';
@@ -13,6 +13,9 @@ import { isBasicPokemon, canPayCost, cardImageSrc, ALL_CARDS } from '@/lib/cardU
 import { runAITurn } from '@/ai/SimpleAI';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
+
+const AFK_TIMEOUT = 10;
+const AFK_WARNING_AT = 3;
 
 // Discriminated union for the bottom-sheet preview context
 type PreviewState =
@@ -44,12 +47,49 @@ export default function GamePage() {
   const stateRef = useRef(game);
   stateRef.current = game;
 
+  // ── Acknowledgement system ───────────────────────────────────────────────────
+  const [ackPromise, setAckPromise] = useState<{ message: string; resolve: () => void } | null>(null);
+  const [ackSecondsLeft, setAckSecondsLeft] = useState(AFK_TIMEOUT);
+  const [afkCount, setAfkCount] = useState(0);
+
+  const waitForAck = useCallback((message: string): Promise<void> => {
+    return new Promise<void>(resolve => {
+      setAckPromise({ message, resolve });
+      setAckSecondsLeft(AFK_TIMEOUT);
+    });
+  }, []);
+
+  const handleAck = useCallback(() => {
+    setAckPromise(prev => {
+      if (prev) prev.resolve();
+      return null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!ackPromise) return;
+    if (ackSecondsLeft <= 0) {
+      setAfkCount(c => c + 1);
+      const { resolve } = ackPromise;
+      setAckPromise(null);
+      resolve();
+      return;
+    }
+    const t = setTimeout(() => setAckSecondsLeft(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [ackPromise, ackSecondsLeft]);
+
   const closePreview = () => setPreview(null);
 
   useEffect(() => {
     setSetupActiveUid(null);
     setSetupBenchUids([]);
   }, [game?.setupStep]);
+
+  // Reset AFK counter when game starts/resets
+  useEffect(() => {
+    if (game?.turn === 0) setAfkCount(0);
+  }, [game?.turn]);
 
   useEffect(() => {
     if (!game || game.phase === 'gameover') return;
@@ -61,6 +101,7 @@ export default function GamePage() {
     runAITurn(
       () => stateRef.current!,
       (s) => useGameStore.setState({ game: s }),
+      waitForAck,
     ).finally(() => setAiRunning(false));
   }, [game?.activePlayer, game?.turn, game?.phase]);
 
@@ -68,7 +109,7 @@ export default function GamePage() {
     if (!game || game.phase !== 'gameover' || rewarded) return;
     setRewarded(true);
     const won = game.winner === 'player1';
-    awardGameResult(won, game.mode === 'pvp' ? 'pvp' : 'vs-ai');
+    awardGameResult(won, game.mode === 'local-2p' ? 'vs-ai' : 'vs-ai');
     // Award 1 random Wizards Black Star Promo on AI win
     if (won && game.mode === 'vs-ai') {
       const promos = ALL_CARDS.filter(c => c.set === 'Wizards Black Star Promos');
@@ -580,6 +621,44 @@ export default function GamePage() {
         </div>
         <GameLog entries={game.log.slice(-3)} className="flex-1 text-[10px]" />
       </div>
+
+      {/* ── AI action acknowledgement banner ─────────────────── */}
+      {ackPromise && game.mode === 'vs-ai' && (
+        <div className="flex-none bg-gray-900 border-b-2 border-yellow-500">
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] text-gray-400 leading-none">CPU action</p>
+              <p className="text-xs text-white font-medium leading-tight truncate">{ackPromise.message}</p>
+            </div>
+            {afkCount > 0 && (
+              <div className="flex items-center gap-1 flex-none">
+                <span className="text-[9px] text-red-400">AFK</span>
+                {Array.from({ length: Math.min(afkCount, 5) }).map((_, i) => (
+                  <div key={i} className={`w-1.5 h-1.5 rounded-full ${i < afkCount ? 'bg-red-500' : 'bg-gray-700'}`} />
+                ))}
+              </div>
+            )}
+            <button
+              onClick={handleAck}
+              className="flex-none px-3 py-1 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg text-xs"
+            >
+              OK {ackSecondsLeft}s
+            </button>
+          </div>
+          {/* countdown bar */}
+          <div className="h-1 bg-gray-800">
+            <div
+              className={`h-full transition-[width] ease-linear ${ackSecondsLeft <= 3 ? 'bg-red-500' : 'bg-yellow-500'}`}
+              style={{ width: `${(ackSecondsLeft / AFK_TIMEOUT) * 100}%`, transitionDuration: '1s' }}
+            />
+          </div>
+          {afkCount >= AFK_WARNING_AT && (
+            <div className="px-3 pb-1 text-[10px] text-red-400 font-medium">
+              ⚠️ AFK warning — {afkCount} missed acknowledgements
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── P1 active — battle zone, takes remaining vertical space ── */}
       <div className="flex-1 min-h-0 flex flex-col items-center justify-center bg-green-900/30 py-1">

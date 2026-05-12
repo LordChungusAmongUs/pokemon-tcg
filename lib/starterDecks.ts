@@ -136,25 +136,25 @@ export const STARTER_DECKS: StarterDeck[] = [
   {
     id: 'starter-overgrowth',
     name: 'Overgrowth',
-    description: 'Official WotC theme deck. Venusaur line and Beedrill swarm the opponent with Grass power.',
-    type: 'Grass',
+    description: 'Grass/Water hybrid. Bulbasaur line and Beedrill provide Grass punch; Gyarados and Starmie deliver Water firepower.',
+    type: 'Grass/Water',
     cardIds: [
-      ...r('base1-44', 4), // Bulbasaur
-      ...r('base1-30', 3), // Ivysaur
-      ...r('base1-15', 2), // Venusaur
-      ...r('base1-69', 3), // Weedle
+      ...r('base1-6',  1), // Gyarados
+      ...r('base1-35', 2), // Magikarp
+      ...r('base1-64', 3), // Starmie
+      ...r('base1-65', 4), // Staryu
+      ...r('base1-17', 1), // Beedrill
       ...r('base1-33', 2), // Kakuna
-      ...r('base1-17', 2), // Beedrill
-      ...r('base1-45', 3), // Caterpie
-      ...r('base1-54', 3), // Metapod
+      ...r('base1-30', 2), // Ivysaur
+      ...r('base1-69', 4), // Weedle
+      ...r('base1-44', 4), // Bulbasaur
+      ...r(POTION,      1),
       ...r(BILL,        2),
-      ...r(OAK,         2),
-      ...r(POTION,      3),
-      ...r(REVIVE,      2),
+      ...r(SUPER_POT,   2),
       ...r(SWITCH,      2),
       ...r(GOW,         2),
-      ...r(E_GRASS, 21),
-      ...r(DCE,      4),
+      ...r(E_WATER,    12),
+      ...r(E_GRASS,    16),
     ],
   },
   {

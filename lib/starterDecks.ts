@@ -160,24 +160,27 @@ export const STARTER_DECKS: StarterDeck[] = [
   {
     id: 'starter-brushfire',
     name: 'Brushfire',
-    description: 'Official WotC theme deck. Charizard is the star; Arcanine and Ninetales provide heat.',
-    type: 'Fire',
+    description: 'Fire/Grass beatdown. Charmander line and Arcanine bring the heat while Weedle, Tangela, and Nidoran fill the bench.',
+    type: 'Fire/Grass',
     cardIds: [
+      ...r('base1-12', 1), // Ninetales
+      ...r('base1-69', 4), // Weedle
+      ...r('base1-66', 2), // Tangela
+      ...r('base1-55', 4), // Nidoran♀
+      ...r('base1-23', 1), // Arcanine
+      ...r('base1-28', 2), // Growlithe
+      ...r('base1-24', 2), // Charmeleon
+      ...r('base1-68', 2), // Vulpix
       ...r('base1-46', 4), // Charmander
-      ...r('base1-24', 3), // Charmeleon
-      ...r('base1-4',  2), // Charizard
-      ...r('base1-68', 4), // Vulpix
-      ...r('base1-12', 2), // Ninetales
-      ...r('base1-28', 4), // Growlithe
-      ...r('base1-23', 3), // Arcanine
-      ...r(BILL,        2),
-      ...r(OAK,         2),
-      ...r(POTION,      3),
-      ...r(SWITCH,      2),
-      ...r(GOW,         2),
-      ...r(PLUSPOWER,   2),
-      ...r(E_FIRE, 21),
-      ...r(DCE,     4),
+      ...r('base1-75', 1), // Lass
+      ...r(PLUSPOWER,  1),
+      ...r(ENERGY_RET, 2),
+      ...r(SWITCH,     1),
+      ...r(POTION,     3),
+      ...r(GOW,        1),
+      ...r(ENERGY_REM, 1),
+      ...r(E_GRASS,   10),
+      ...r(E_FIRE,    18),
     ],
   },
   {

@@ -100,7 +100,8 @@ interface AuthStore {
   deleteDeck: (id: string) => Promise<void>;
   addXP: (amount: number) => Promise<void>;
   addCredits: (amount: number) => Promise<void>;
-  awardGameResult: (won: boolean) => Promise<void>;
+  awardGameResult: (won: boolean, mode?: 'vs-ai' | 'pvp') => Promise<void>;
+  claimDailyCredits: () => Promise<boolean>;
   addToCollection: (cardIds: string[]) => void;
   addEncountered: (cardIds: string[]) => void;
   ensureStarterDeck: () => void;
@@ -128,6 +129,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const encountered = loadEncounteredFromStorage(LOCAL_GUEST_ID);
       set({ user: fakeUser(), profile, isLocalGuest: true, loading: false, collection, encountered });
       get().ensureStarterDeck();
+      get().claimDailyCredits();
       return;
     }
 
@@ -161,6 +163,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
             encountered: loadEncounteredFromStorage(u.id),
           });
           get().ensureStarterDeck();
+          get().claimDailyCredits();
         } else {
           set({ profile: null, decks: [], collection: {}, encountered: new Set() });
         }
@@ -323,12 +326,32 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     await get().refreshProfile();
   },
 
-  awardGameResult: async (won) => {
+  awardGameResult: async (won, mode = 'vs-ai') => {
     const { addXP, addCredits } = get();
     const xp = won ? 100 : 25;
-    const credits = won ? CREDIT_REWARDS.winGame : CREDIT_REWARDS.loseGame;
+    let credits: number;
+    if (mode === 'pvp') {
+      credits = won ? CREDIT_REWARDS.winPvp : CREDIT_REWARDS.losePvp;
+    } else {
+      credits = won ? CREDIT_REWARDS.winAI : CREDIT_REWARDS.loseAI;
+    }
     await addXP(xp);
     await addCredits(credits);
+  },
+
+  claimDailyCredits: async () => {
+    const { user, isLocalGuest, addCredits } = get();
+    if (!user) return false;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    const key = `pokemon-tcg-daily-${storageId}`;
+    try {
+      const last = localStorage.getItem(key);
+      const now = Date.now();
+      if (last && now - parseInt(last, 10) < 24 * 60 * 60 * 1000) return false;
+      localStorage.setItem(key, String(now));
+    } catch { return false; }
+    await addCredits(CREDIT_REWARDS.daily);
+    return true;
   },
 
   addToCollection: (cardIds: string[]) => {

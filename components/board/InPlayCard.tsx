@@ -47,8 +47,9 @@ export default function InPlayCard({ pokemon, onClick, selected, isActive, small
   const containerW = cardW + depth * stackOff;
   const containerH = cardH + depth * stackOff;
 
-  const badgeSz = small ? 14 : 18;
-  const badgeOff = small ? 9 : 12;
+  const eCardW = small ? 28 : 40;
+  const eCardH = small ? 39 : 56;
+  const eStackOff = 3;
 
   return (
     <div
@@ -118,28 +119,35 @@ export default function InPlayCard({ pokemon, onClick, selected, isActive, small
         )}
       </div>
 
-      {/* Energy badges (colored circles stacked) */}
+      {/* Energy stack (mini cards, same visual pattern as evolution stack) */}
       {pokemon.attachedEnergy.length > 0 && (() => {
         const energies = pokemon.attachedEnergy;
-        const totalW = badgeSz + (energies.length - 1) * badgeOff;
+        const eDepth = energies.length - 1;
+        const eTotalW = eCardW + eDepth * eStackOff;
+        const eTotalH = eCardH + eDepth * eStackOff;
         return (
-          <div className="relative" style={{ width: totalW, height: badgeSz }}>
+          <div className="relative" style={{ width: eTotalW, height: eTotalH }}>
             {energies.map((e, idx) => {
               const imgSrc = ENERGY_IMAGE_MAP[e.type];
               return (
                 <div
                   key={e.uid}
                   title={e.type}
-                  className={`absolute rounded-full overflow-hidden shadow border border-white/40
+                  className={`absolute rounded overflow-hidden shadow border border-white/20
                     ${!imgSrc ? (TYPE_BG[e.type] || 'bg-gray-600') : ''}`}
-                  style={{ left: idx * badgeOff, width: badgeSz, height: badgeSz, zIndex: idx }}
+                  style={{
+                    width: eCardW, height: eCardH,
+                    top: (eDepth - idx) * eStackOff,
+                    left: (eDepth - idx) * eStackOff,
+                    zIndex: idx,
+                  }}
                 >
                   {imgSrc ? (
-                    <Image src={imgSrc} alt={e.type} fill className="object-cover" unoptimized sizes={`${badgeSz}px`} />
+                    <Image src={imgSrc} alt={e.type} fill className="object-cover" unoptimized sizes={`${eCardW}px`} />
                   ) : (
                     <span
                       className="flex items-center justify-center w-full h-full text-white font-bold"
-                      style={{ fontSize: badgeSz * 0.5 }}
+                      style={{ fontSize: eCardW * 0.4 }}
                     >
                       {TYPE_TEXT[e.type] ?? '?'}
                     </span>

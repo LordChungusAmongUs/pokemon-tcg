@@ -9,10 +9,12 @@ export const XP_REWARDS = {
 } as const;
 
 export const CREDIT_REWARDS = {
-  winGame: 50,
-  loseGame: 15,
+  winAI: 50,
+  loseAI: 25,
+  winPvp: 100,
+  losePvp: 25,
+  daily: 100,
   levelUp: 100,
-  packOpen: 0,
 } as const;
 
 // XP required to go FROM level N to level N+1

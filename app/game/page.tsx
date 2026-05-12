@@ -67,7 +67,7 @@ export default function GamePage() {
     if (!game || game.phase !== 'gameover' || rewarded) return;
     setRewarded(true);
     const won = game.winner === 'player1';
-    awardGameResult(won);
+    awardGameResult(won, game.mode === 'pvp' ? 'pvp' : 'vs-ai');
     const allCards = [game.player1, game.player2].flatMap(p => [
       ...p.deck, ...p.hand, ...p.discard, ...p.prizes,
       ...(p.active ? [{ card: p.active.card }] : []),

@@ -3,8 +3,8 @@ import { create } from 'zustand';
 import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import type { Profile, Deck } from '@/types/database';
-import { computeLevel, CREDIT_REWARDS, STARTING_CREDITS, VOUCHER_THRESHOLD, SET_PROGRESSION } from '@/lib/progression';
-import { setCompletionPct } from '@/lib/cardUtils';
+import { computeLevel, CREDIT_REWARDS, STARTING_CREDITS, VOUCHER_THRESHOLD, SET_PROGRESSION, getLevelUpReward, type LevelReward } from '@/lib/progression';
+import { setCompletionPct, ALL_CARDS, isSetUnlocked } from '@/lib/cardUtils';
 import { STARTER_DECKS } from '@/lib/starterDecks';
 
 const LOCAL_GUEST_KEY = 'pokemon-tcg-guest';
@@ -58,6 +58,14 @@ function loadPrereleaseInvites(userId: string): string[] {
 }
 function savePrereleaseInvites(userId: string, p: string[]) {
   try { localStorage.setItem(prereleaseKey(userId), JSON.stringify(p)); } catch {}
+}
+
+function packVouchersKey(userId: string) { return `pokemon-tcg-packvouchers-${userId}`; }
+function loadPackVouchers(userId: string): number {
+  try { return parseInt(localStorage.getItem(packVouchersKey(userId)) || '0', 10) || 0; } catch { return 0; }
+}
+function savePackVouchers(userId: string, n: number) {
+  try { localStorage.setItem(packVouchersKey(userId), String(n)); } catch {}
 }
 
 function starterGivenKey(userId: string) { return `pokemon-tcg-starter-${userId}`; }
@@ -117,6 +125,8 @@ interface AuthStore {
   encountered: Set<string>;           // card_ids seen in matches
   freeVouchers: string[];             // set names with unclaimed deck vouchers
   prereleaseInvites: string[];        // set names with unused prerelease invites
+  packVouchers: number;               // free booster pack vouchers from level-ups
+  pendingLevelUp: { level: number; reward: LevelReward; cardId?: string } | null;
   init: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInAsGuest: () => Promise<void>;
@@ -135,6 +145,8 @@ interface AuthStore {
   checkMilestones: () => void;
   redeemVoucher: (setName: string) => void;
   usePrereleaseInvite: (setName: string) => void;
+  dismissLevelUp: () => void;
+  usePackVoucher: () => void;
   resetAccount: () => Promise<void>;
 }
 
@@ -148,6 +160,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   encountered: new Set<string>(),
   freeVouchers: [],
   prereleaseInvites: [],
+  packVouchers: 0,
+  pendingLevelUp: null,
 
   init: async () => {
     // Restore local guest session first (works without any Supabase setup)
@@ -163,6 +177,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         user: fakeUser(), profile, isLocalGuest: true, loading: false, collection, encountered,
         freeVouchers: loadVouchers(LOCAL_GUEST_ID),
         prereleaseInvites: loadPrereleaseInvites(LOCAL_GUEST_ID),
+        packVouchers: loadPackVouchers(LOCAL_GUEST_ID),
       });
       get().ensureStarterDeck();
       get().claimDailyCredits();
@@ -200,6 +215,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
             encountered: loadEncounteredFromStorage(u.id),
             freeVouchers: loadVouchers(u.id),
             prereleaseInvites: loadPrereleaseInvites(u.id),
+            packVouchers: loadPackVouchers(u.id),
           });
           get().ensureStarterDeck();
           get().claimDailyCredits();
@@ -332,21 +348,72 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const { user, profile, isLocalGuest } = get();
     if (!user || !profile) return;
 
-    const newXP = (profile.xp ?? 0) + amount;
-    const { level } = computeLevel(newXP);
-    const leveledUp = level > (profile.level ?? 1);
-    const bonusCredits = leveledUp ? CREDIT_REWARDS.levelUp * (level - (profile.level ?? 1)) : 0;
+    const oldLevel = computeLevel(profile.xp ?? 0).level;
+    const newXP    = (profile.xp ?? 0) + amount;
+    const { level: newLevel } = computeLevel(newXP);
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+
+    let bonusCredits = 0;
+    let pendingLevelUp: { level: number; reward: LevelReward; cardId?: string } | null = null;
+
+    for (let lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
+      const reward = getLevelUpReward(lvl);
+      let cardId: string | undefined;
+
+      if (reward.type === 'credits' && reward.amount) {
+        bonusCredits += reward.amount;
+      } else if (reward.type === 'deck-voucher') {
+        const next = [...get().freeVouchers, 'any'];
+        saveVouchers(storageId, next);
+        set({ freeVouchers: next });
+      } else if (reward.type === 'pack-voucher') {
+        const next = get().packVouchers + 1;
+        savePackVouchers(storageId, next);
+        set({ packVouchers: next });
+      } else if (reward.type === 'rare-voucher') {
+        const pool = ALL_CARDS.filter(c =>
+          c.rarity?.toLowerCase() === 'rare' &&
+          isSetUnlocked(c.set ?? '', get().collection)
+        );
+        if (pool.length > 0) {
+          const pick = pool[Math.floor(Math.random() * pool.length)];
+          get().addToCollection([pick.id]);
+          cardId = pick.id;
+        }
+      } else if (reward.type === 'holo-voucher') {
+        const pool = ALL_CARDS.filter(c =>
+          c.rarity?.toLowerCase().includes('holo') &&
+          isSetUnlocked(c.set ?? '', get().collection)
+        );
+        if (pool.length > 0) {
+          const pick = pool[Math.floor(Math.random() * pool.length)];
+          get().addToCollection([pick.id]);
+          cardId = pick.id;
+        }
+      } else if (reward.type === 'promo') {
+        const pool = ALL_CARDS.filter(c => c.set === 'Wizards Black Star Promos');
+        if (pool.length > 0) {
+          const pick = pool[Math.floor(Math.random() * pool.length)];
+          get().addToCollection([pick.id]);
+          cardId = pick.id;
+        }
+      }
+
+      pendingLevelUp = { level: lvl, reward, cardId };
+    }
+
     const newCredits = (profile.credits ?? 0) + bonusCredits;
 
     if (isLocalGuest) {
-      const updated = { ...profile, xp: newXP, level, credits: newCredits };
+      const updated = { ...profile, xp: newXP, level: newLevel, credits: newCredits };
       saveLocalGuest(updated);
-      set({ profile: updated });
+      set({ profile: updated, ...(pendingLevelUp ? { pendingLevelUp } : {}) });
       return;
     }
 
     const supabase = createClient();
-    await supabase.from('profiles').update({ xp: newXP, level, credits: newCredits }).eq('id', user.id);
+    await supabase.from('profiles').update({ xp: newXP, level: newLevel, credits: newCredits }).eq('id', user.id);
+    if (pendingLevelUp) set({ pendingLevelUp });
     await get().refreshProfile();
   },
 
@@ -447,6 +514,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ freeVouchers: updated });
   },
 
+  dismissLevelUp: () => set({ pendingLevelUp: null }),
+
+  usePackVoucher: () => {
+    const { user, isLocalGuest, packVouchers } = get();
+    if (!user || packVouchers <= 0) return;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    const next = packVouchers - 1;
+    savePackVouchers(storageId, next);
+    set({ packVouchers: next });
+  },
+
   usePrereleaseInvite: (setName: string) => {
     const { user, isLocalGuest, prereleaseInvites } = get();
     if (!user) return;
@@ -471,10 +549,61 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     if (!user) return;
     const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
     if (wasStarterGiven(storageId)) return;
-    const starterDeck = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
-    if (!starterDeck) return;
-    const cardIds = starterDeck.cardIds.filter(id => !id.startsWith('basic-'));
-    get().addToCollection(cardIds);
+
+    function saveDeckLocally(name: string, cardIds: string[]) {
+      try {
+        const key = 'pokemon-tcg-decks';
+        const all: { name: string; cardIds: string[] }[] = JSON.parse(localStorage.getItem(key) || '[]');
+        if (!all.find(d => d.name === name)) {
+          all.push({ name, cardIds });
+          localStorage.setItem(key, JSON.stringify(all));
+        }
+      } catch {}
+    }
+
+    // Fists & Fire — give cards to collection
+    const fistsFire = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
+    if (fistsFire) {
+      get().addToCollection(fistsFire.cardIds.filter(id => !id.startsWith('basic-')));
+      saveDeckLocally(fistsFire.name, fistsFire.cardIds);
+    }
+
+    // Machamp Deck — give cards + save to builder
+    const machamp = STARTER_DECKS.find(d => d.id === 'starter-machamp');
+    if (machamp) {
+      get().addToCollection(machamp.cardIds.filter(id => !id.startsWith('basic-')));
+      if (!isLocalGuest) {
+        get().saveDeck(machamp.name, machamp.cardIds);
+      } else {
+        saveDeckLocally(machamp.name, machamp.cardIds);
+      }
+    }
+
+    // 3 pack vouchers
+    const newPV = get().packVouchers + 3;
+    savePackVouchers(storageId, newPV);
+    set({ packVouchers: newPV });
+
+    // 1 theme deck voucher
+    const newVouchers = [...get().freeVouchers, 'any'];
+    saveVouchers(storageId, newVouchers);
+    set({ freeVouchers: newVouchers });
+
+    // 1 random Base Set rare card
+    const rarePool = ALL_CARDS.filter(c => c.rarity?.toLowerCase() === 'rare' && c.set === 'Base');
+    if (rarePool.length > 0)
+      get().addToCollection([rarePool[Math.floor(Math.random() * rarePool.length)].id]);
+
+    // 1 random Base Set holo card
+    const holoPool = ALL_CARDS.filter(c => c.rarity?.toLowerCase().includes('holo') && c.set === 'Base');
+    if (holoPool.length > 0)
+      get().addToCollection([holoPool[Math.floor(Math.random() * holoPool.length)].id]);
+
+    // 1 random Wizards Black Star Promo
+    const promoPool = ALL_CARDS.filter(c => c.set === 'Wizards Black Star Promos');
+    if (promoPool.length > 0)
+      get().addToCollection([promoPool[Math.floor(Math.random() * promoPool.length)].id]);
+
     markStarterGiven(storageId);
   },
 
@@ -485,12 +614,16 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
     saveCollectionToStorage(storageId, {});
     saveEncounteredToStorage(storageId, new Set());
+    saveVouchers(storageId, []);
+    savePackVouchers(storageId, 0);
+    savePrereleaseInvites(storageId, []);
     try { localStorage.removeItem(starterGivenKey(storageId)); } catch {}
+    try { localStorage.removeItem(`pokemon-tcg-milestones-${storageId}`); } catch {}
 
     if (isLocalGuest) {
       const reset: Profile = { ...makeGuestProfile(), display_name: profile?.display_name ?? 'Trainer' };
       saveLocalGuest(reset);
-      set({ profile: reset, collection: {}, encountered: new Set() });
+      set({ profile: reset, collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [] });
       get().ensureStarterDeck();
       return;
     }
@@ -499,7 +632,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     await supabase.from('profiles').update({
       xp: 0, level: 1, credits: STARTING_CREDITS, wins: 0, losses: 0, elo: 1000,
     }).eq('id', user.id);
-    set({ collection: {}, encountered: new Set() });
+    set({ collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [] });
     await get().refreshProfile();
     get().ensureStarterDeck();
   },

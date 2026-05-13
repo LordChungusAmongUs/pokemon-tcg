@@ -197,7 +197,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     requiredSet: 'Base',
     cardIds: [
       ...r('base1-7',  1), // Hitmonchan
-      ...r('base2-27', 2), // Farfetch'd
+      ...r('base1-27', 2), // Farfetch'd
       ...r('base1-42', 2), // Wartortle
       ...r('base1-63', 4), // Squirtle
       ...r('base1-65', 3), // Staryu
@@ -285,7 +285,7 @@ export const STARTER_DECKS: StarterDeck[] = [
       ...r('base3-9',  2), // Kabutops
       ...r('base3-7',  3), // Hitmonlee
       ...r('base1-7',  2), // Hitmonchan
-      ...r('base1-61', 4), // Sandshrew
+      ...r('base1-62', 4), // Sandshrew
       ...r('base3-41', 2), // Sandslash
       ...r('base3-1',  1), // Aerodactyl
       ...r('base3-62', 4), // Mysterious Fossil
@@ -424,7 +424,7 @@ export const STARTER_DECKS: StarterDeck[] = [
       ...r('base2-53', 4), // Goldeen
       ...r('base2-46', 2), // Seaking
       ...r('gym1-32', 4), // Misty's Tentacool
-      ...r('base1-29', 2), // Tentacruel
+      ...r('gym1-10', 2),  // Misty's Tentacruel
       ...r('base1-41', 4), // Seel
       ...r('base1-25', 2), // Dewgong
       // Trainers (14)

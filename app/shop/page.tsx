@@ -16,7 +16,7 @@ const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl']);
 const SHOP_SETS = SET_PROGRESSION.filter(s => !EXCLUDED.has(s.name));
 
 export default function ShopPage() {
-  const { user, profile, addCredits, addToCollection, collection, freeVouchers, redeemVoucher, saveDeck, isLocalGuest } = useAuthStore();
+  const { user, profile, addCredits, addToCollection, collection, freeVouchers, redeemVoucher, saveDeck, isLocalGuest, packVouchers, usePackVoucher } = useAuthStore();
   const [packResult, setPackResult] = useState<CardData[]>([]);
   const [packLabel, setPackLabel] = useState('');
   const [tab, setTab] = useState<'packs' | 'decks' | 'singles'>('packs');
@@ -24,6 +24,28 @@ export default function ShopPage() {
   const [singlesSet, setSinglesSet] = useState('All');
 
   const credits = profile?.credits ?? 0;
+
+  async function redeemPackVoucher(setName: string) {
+    if (!user) { alert('Sign in first!'); return; }
+    if (!isSetUnlocked(setName, collection)) {
+      alert('This set is not unlocked yet.');
+      return;
+    }
+    const allSetCards = ALL_CARDS.filter(c => c.set === setName);
+    const basicEnergyPool = allSetCards.filter(c => c.supertype === 'Energy' && !c.rarity);
+    const setCards = allSetCards
+      .filter(c => !basicEnergyPool.some(e => e.id === c.id))
+      .map(c => ({ id: c.id, rarity: c.rarity || 'Common' }));
+    if (setCards.length === 0) return;
+    const pickEnergy = () => basicEnergyPool[Math.floor(Math.random() * basicEnergyPool.length)].id;
+    const allIds = [...pickPackCards(setCards)];
+    if (basicEnergyPool.length > 0) allIds.push(pickEnergy(), pickEnergy());
+    const pickedCards = allIds.map(id => ALL_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
+    usePackVoucher();
+    addToCollection(allIds);
+    setPackResult(pickedCards);
+    setPackLabel(`🎟 Pack Voucher — ${setName}`);
+  }
 
   async function buyPacks(setName: string, count: number) {
     if (!user) { alert('Sign in to buy packs!'); return; }
@@ -141,6 +163,12 @@ export default function ShopPage() {
               <div className="text-xl font-bold text-yellow-400">{credits}</div>
               <div className="text-xs text-gray-400">Credits</div>
             </div>
+            {packVouchers > 0 && (
+              <div className="bg-purple-500/20 border border-purple-500/50 rounded-xl px-3 py-2 text-center">
+                <div className="text-lg font-bold text-purple-300">{packVouchers}</div>
+                <div className="text-xs text-gray-400">Pack 🎟</div>
+              </div>
+            )}
             <Link href="/" className="text-gray-400 hover:text-white text-sm">← Home</Link>
           </div>
         </div>
@@ -226,6 +254,14 @@ export default function ShopPage() {
                         </button>
                       ))}
                     </div>
+                    {packVouchers > 0 && unlocked && (
+                      <button
+                        onClick={() => redeemPackVoucher(name)}
+                        className="w-full mt-2 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg"
+                      >
+                        🎟 Use Pack Voucher ({packVouchers} left)
+                      </button>
+                    )}
                   </div>
                 );
               })}

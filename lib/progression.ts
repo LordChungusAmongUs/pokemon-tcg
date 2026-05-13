@@ -14,8 +14,33 @@ export const CREDIT_REWARDS = {
   winPvp: 100,
   losePvp: 25,
   daily: 100,
-  levelUp: 100,
 } as const;
+
+export type LevelRewardType = 'credits' | 'rare-voucher' | 'holo-voucher' | 'deck-voucher' | 'pack-voucher' | 'promo';
+
+export interface LevelReward {
+  type: LevelRewardType;
+  amount?: number;
+  label: string;
+}
+
+// Reward earned when reaching `level`. Called for levels 2, 3, 4, …
+export function getLevelUpReward(level: number): LevelReward {
+  if (level % 10 === 0) return { type: 'credits',      amount: 500, label: '500 Credits' };
+  if (level % 5  === 0) return { type: 'deck-voucher',              label: 'Theme Deck Voucher' };
+  const table: LevelReward[] = [
+    { type: 'credits',      amount:  50, label:  '50 Credits' },
+    { type: 'pack-voucher',              label: 'Booster Pack Voucher' },
+    { type: 'credits',      amount: 100, label: '100 Credits' },
+    { type: 'rare-voucher',              label: 'Random Rare Card' },
+    { type: 'credits',      amount: 100, label: '100 Credits' },
+    { type: 'pack-voucher',              label: 'Booster Pack Voucher' },
+    { type: 'holo-voucher',              label: 'Random Holo Rare Card' },
+    { type: 'credits',      amount: 250, label: '250 Credits' },
+    { type: 'promo',                     label: 'Wizards Black Star Promo' },
+  ];
+  return table[(level - 1) % table.length];
+}
 
 // XP required to go FROM level N to level N+1
 export function xpForNextLevel(level: number): number {
@@ -74,7 +99,7 @@ export const PACK_COST = 30;
 export const PACK_BUNDLE_5 = 125;
 export const PACK_BUNDLE_10 = 250;
 export const THEME_DECK_COST = 150;
-export const STARTING_CREDITS = 250;
+export const STARTING_CREDITS = 500;
 
 export const SINGLE_COSTS: Record<string, number> = {
   Common: 3,

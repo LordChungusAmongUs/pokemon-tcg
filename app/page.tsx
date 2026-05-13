@@ -8,6 +8,7 @@ import { getAvailableAIDecks } from '@/lib/starterDecks';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { computeLevel } from '@/lib/progression';
+import CardImage from '@/components/cards/CardImage';
 
 const BROWSE_CARDS = [...ALL_CARDS, ...BASIC_ENERGY_CARDS];
 
@@ -22,7 +23,7 @@ function deckToCards(deck: LocalDeck): CardData[] {
 }
 
 export default function HomePage() {
-  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount, prereleaseInvites, freeVouchers, collection } = useAuthStore();
+  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount, prereleaseInvites, freeVouchers, collection, pendingLevelUp, dismissLevelUp } = useAuthStore();
   const [localDecks, setLocalDecks] = useState<LocalDeck[]>([]);
   const [p1Deck, setP1Deck] = useState('');
   const [p2Deck, setP2Deck] = useState('');
@@ -74,6 +75,37 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950 flex items-center justify-center p-4">
+
+      {/* Level-up reward modal */}
+      {pendingLevelUp && (
+        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border-2 border-yellow-500 rounded-2xl p-6 max-w-xs w-full text-center space-y-4">
+            <div>
+              <p className="text-xs text-yellow-400 uppercase tracking-widest font-bold">Level Up!</p>
+              <p className="text-4xl font-black text-white mt-1">Lv {pendingLevelUp.level}</p>
+            </div>
+            <div className="bg-gray-800 rounded-xl px-4 py-3">
+              <p className="text-xs text-gray-400 mb-1">Reward</p>
+              <p className="text-lg font-bold text-yellow-300">{pendingLevelUp.reward.label}</p>
+            </div>
+            {pendingLevelUp.cardId && (() => {
+              const card = ALL_CARDS.find(c => c.id === pendingLevelUp!.cardId);
+              return card ? (
+                <div className="flex justify-center">
+                  <CardImage card={card} />
+                </div>
+              ) : null;
+            })()}
+            <button
+              onClick={dismissLevelUp}
+              className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-lg"
+            >
+              Awesome!
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-md w-full space-y-6 text-white">
         {/* Title + auth */}
         <div className="text-center space-y-1">

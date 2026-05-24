@@ -418,15 +418,48 @@ export default function ShopPage() {
             </div>
           );
 
-          // Group theme decks by prerequisiteSet for display
-          const GROUPS = [
-            { label: 'Base Set', prereqSet: null as string | null, prereqPct: 0 },
-            { label: 'Jungle Set', prereqSet: 'Base', prereqPct: 0.75 },
-            { label: 'Fossil Set', prereqSet: 'Jungle', prereqPct: 0.75 },
-            { label: 'Base Set 2', prereqSet: 'Base', prereqPct: 1.0 },
-            { label: 'Team Rocket', prereqSet: 'Fossil', prereqPct: 0.75 },
-            { label: 'Gym Heroes', prereqSet: 'Team Rocket', prereqPct: 0.75 },
-            { label: 'Gym Challenge', prereqSet: 'Gym Heroes', prereqPct: 0.75 },
+          // Explicit deck groups — order and membership controlled here
+          const GROUPS: { label: string; ids: string[]; prereqSet: string | null; prereqPct: number }[] = [
+            {
+              label: 'Starter Set',
+              ids: ['starter-machamp'],
+              prereqSet: null, prereqPct: 0,
+            },
+            {
+              label: 'Base Set',
+              ids: ['starter-overgrowth', 'starter-zap', 'starter-brushfire', 'starter-blackout'],
+              prereqSet: null, prereqPct: 0,
+            },
+            {
+              label: 'Jungle',
+              ids: ['jungle-water-blast', 'jungle-power-reserve'],
+              prereqSet: 'Base', prereqPct: 0.75,
+            },
+            {
+              label: 'Fossil',
+              ids: ['fossil-lockdown', 'fossil-bodyguard'],
+              prereqSet: 'Jungle', prereqPct: 0.75,
+            },
+            {
+              label: 'Base Set 2',
+              ids: ['bs2-grass-chopper', 'bs2-hot-water', 'starter-lightning-bug', 'jungle-psych-out'],
+              prereqSet: 'Base', prereqPct: 1.0,
+            },
+            {
+              label: 'Team Rocket',
+              ids: ['rocket-devastation', 'rocket-trouble'],
+              prereqSet: 'Fossil', prereqPct: 0.75,
+            },
+            {
+              label: 'Gym Heroes',
+              ids: ['gym1-brock', 'gym1-misty', 'gym1-surge', 'gym1-erika'],
+              prereqSet: 'Team Rocket', prereqPct: 0.75,
+            },
+            {
+              label: 'Gym Challenge',
+              ids: ['gym2-blaine', 'gym2-giovanni', 'gym2-koga', 'gym2-sabrina'],
+              prereqSet: 'Gym Heroes', prereqPct: 0.75,
+            },
           ];
 
           return (
@@ -450,10 +483,7 @@ export default function ShopPage() {
               {/* ── Theme Deck groups ─────────────────────────── */}
               <p className="text-xs text-gray-500">Theme decks cost {THEME_DECK_COST} credits. Cards are added to your collection and the deck is saved to the builder.</p>
               {GROUPS.map(group => {
-                const groupDecks = themeDecks.filter(sd =>
-                  sd.prerequisiteSet === group.prereqSet &&
-                  (group.prereqSet === null || (sd.prerequisitePct ?? 0.75) === group.prereqPct)
-                );
+                const groupDecks = themeDecks.filter(sd => group.ids.includes(sd.id));
                 if (groupDecks.length === 0) return null;
                 const prereqPct = group.prereqSet ? Math.round(setCompletionPct(group.prereqSet, collection) * 100) : 100;
                 const threshold  = Math.round(group.prereqPct * 100);

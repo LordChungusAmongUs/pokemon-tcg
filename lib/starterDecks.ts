@@ -573,28 +573,29 @@ export const STARTER_DECKS: StarterDeck[] = [
   {
     id: 'rocket-devastation',
     name: "Rocket's Devastation",
-    description: "Official WotC Team Rocket theme deck. Dark Alakazam and Dark Charizard bring overwhelming power.",
-    type: 'Psychic/Fire',
+    description: "Team Rocket Grass/Water control. Dark Weezing poisons the field while Dark Vaporeon and the Oddish line grind opponents down.",
+    type: 'Grass/Water',
     requiredSet: 'Team Rocket',
     prerequisiteSet: 'Fossil',
     cardIds: [
-      ...r('base1-43', 4), // Abra
-      ...r('base1-32', 2), // Kadabra
-      ...r('base5-1',  2), // Dark Alakazam
-      ...r('base1-49', 4), // Drowzee
-      ...r('base5-9',  2), // Dark Hypno
-      ...r('base1-46', 4), // Charmander
-      ...r('base1-24', 2), // Charmeleon
-      ...r('base5-4',  2), // Dark Charizard
-      ...r('base5-2',  2), // Dark Arbok
-      ...r(HCTR,         2),
-      ...r(ROCKETS_SA,   2),
-      ...r(BILL,         2),
-      ...r(POTION,       3),
-      ...r(GOW,          1),
-      ...r(E_PSYCHIC,   14),
-      ...r(E_FIRE,       8),
-      ...r(DCE,          4),
+      ...r('base5-14', 1), // Dark Weezing (holo)
+      ...r('base5-58', 4), // Koffing (Rocket)
+      ...r('base5-36', 1), // Dark Gloom
+      ...r('base5-63', 3), // Oddish (Rocket)
+      ...r('base1-69', 3), // Weedle
+      ...r('base5-45', 1), // Dark Vaporeon
+      ...r('base5-46', 1), // Dark Wartortle
+      ...r('base5-55', 3), // Eevee (Rocket)
+      ...r('base5-68', 3), // Squirtle (Rocket)
+      ...r('base1-42', 1), // Wartortle
+      ...r('base5-47', 1), // Magikarp (Rocket)
+      ...r(SUPER_POT,  1), // Super Potion
+      ...r('base5-76', 1), // Imposter Oak's Revenge
+      ...r(GOW,        2), // Gust of Wind
+      ...r(POTION,     2), // Potion
+      ...r(FULL_HEAL,  1), // Full Heal
+      ...r(E_WATER,   10), // Water Energy
+      ...r(E_GRASS,   16), // Grass Energy
     ],
   },
 

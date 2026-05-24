@@ -116,7 +116,7 @@ export default function ShopPage() {
       {/* Pack preview overlay */}
       {previewSet && (() => {
         const setCards = ALL_CARDS.filter(c => c.set === previewSet && c.supertype !== 'Energy');
-        const seen = setCards.filter(c => encountered.has(c.id));
+        const seen = setCards.filter(c => encountered.has(c.id) || (collection[c.id] ?? 0) > 0);
         const unknownCount = setCards.length - seen.length;
         return (
           <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
@@ -125,7 +125,7 @@ export default function ShopPage() {
                 <div>
                   <h2 className="text-lg font-bold text-yellow-400">{previewSet} — Set Preview</h2>
                   <p className="text-xs text-gray-400">
-                    {seen.length} discovered · {unknownCount} unknown — encounter cards in matches to reveal them
+                    {seen.length} revealed · {unknownCount} unknown — own or encounter cards to reveal them
                   </p>
                 </div>
                 <button onClick={() => setPreviewSet(null)} className="text-gray-400 hover:text-white text-2xl leading-none ml-4">×</button>
@@ -316,7 +316,7 @@ export default function ShopPage() {
                       onClick={() => setPreviewSet(name)}
                       className="w-full mt-1.5 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg"
                     >
-                      👁 Preview Set ({ALL_CARDS.filter(c => c.set === name && encountered.has(c.id)).length} / {ALL_CARDS.filter(c => c.set === name && c.supertype !== 'Energy').length} discovered)
+                      👁 Preview Set ({ALL_CARDS.filter(c => c.set === name && c.supertype !== 'Energy' && (encountered.has(c.id) || (collection[c.id] ?? 0) > 0)).length} / {ALL_CARDS.filter(c => c.set === name && c.supertype !== 'Energy').length} revealed)
                     </button>
                   </div>
                 );

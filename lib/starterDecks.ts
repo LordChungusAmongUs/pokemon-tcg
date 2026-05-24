@@ -587,8 +587,9 @@ export const STARTER_DECKS: StarterDeck[] = [
       ...r('base5-36', 1), // Dark Gloom
       ...r('base5-63', 3), // Oddish (Rocket)
       ...r('base1-69', 3), // Weedle
-      ...r('base5-45', 1), // Dark Vaporeon
+      ...r('base5-45', 2), // Dark Vaporeon
       ...r('base5-46', 1), // Dark Wartortle
+      ...r('base1-66', 3), // Tangela
       ...r('base5-55', 3), // Eevee (Rocket)
       ...r('base5-68', 3), // Squirtle (Rocket)
       ...r('base1-42', 1), // Wartortle

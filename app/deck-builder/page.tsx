@@ -8,7 +8,6 @@ import type { Deck } from '@/types/database';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
 import { isSetUnlocked } from '@/lib/cardUtils';
-import { STARTER_DECKS } from '@/lib/starterDecks';
 import { FORMATS } from '@/lib/formats';
 import { pokedexNumber, SET_RELEASE_ORDER } from '@/lib/pokedex';
 
@@ -127,14 +126,6 @@ export default function DeckBuilderPage() {
     const idx = deck.findLastIndex(c => c.id === card.id);
     if (idx < 0) return;
     setDeck(deck.filter((_, i) => i !== idx));
-  }
-
-  function loadStarterDeck(id: string) {
-    const sd = STARTER_DECKS.find(s => s.id === id);
-    if (!sd) return;
-    setDeck(deckToCards(sd.cardIds));
-    setDeckName(sd.name);
-    setEditingDeckId(undefined);
   }
 
   async function handleSave() {
@@ -344,22 +335,6 @@ export default function DeckBuilderPage() {
             >
               Save Deck
             </button>
-          </div>
-        </div>
-
-        {/* Starter decks */}
-        <div className="p-2 border-b border-gray-800">
-          <p className="text-xs text-gray-400 mb-1">Starter Decks</p>
-          <div className="grid grid-cols-2 gap-1">
-            {STARTER_DECKS.map(sd => (
-              <button
-                key={sd.id}
-                onClick={() => loadStarterDeck(sd.id)}
-                className="text-left px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded text-xs"
-              >
-                {sd.name}
-              </button>
-            ))}
           </div>
         </div>
 

@@ -624,22 +624,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
     if (wasStarterGiven(storageId)) return;
 
-    function saveDeckLocally(name: string, cardIds: string[]) {
-      try {
-        const key = 'pokemon-tcg-decks';
-        const all: { name: string; cardIds: string[] }[] = JSON.parse(localStorage.getItem(key) || '[]');
-        if (!all.find(d => d.name === name)) {
-          all.push({ name, cardIds });
-          localStorage.setItem(key, JSON.stringify(all));
-        }
-      } catch {}
-    }
-
-    // Fists & Fire — only starter deck given on new profile (60 cards, no Machamp)
+    // Fists & Fire cards added to collection — player builds their own deck
     const fistsFire = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
     if (fistsFire) {
       get().addToCollection(fistsFire.cardIds.filter(id => !id.startsWith('basic-')));
-      saveDeckLocally(fistsFire.name, fistsFire.cardIds);
     }
 
     // 3 unopened Base Set packs (shown in onboarding step 2)

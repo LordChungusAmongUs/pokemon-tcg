@@ -11,6 +11,7 @@ import Image from 'next/image';
 import type { CardData, EnergyType } from '@/engine/GameState';
 import { isBasicPokemon, isPokemon, canPayCost, cardImageSrc, ALL_CARDS } from '@/lib/cardUtils';
 import { isActivePowerOn } from '@/engine/GameEngine';
+import { subscribeToFlips } from '@/engine/cardEffects';
 import { runAITurn } from '@/ai/SimpleAI';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
@@ -52,6 +53,9 @@ export default function GamePage() {
   const [promoWon, setPromoWon] = useState<CardData | null>(null);
   const [passModal, setPassModal] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [coinFlipDisplay, setCoinFlipDisplay] = useState<boolean[] | null>(null);
+  const pendingFlips = useRef<boolean[]>([]);
+  const coinFlipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [aiRunning, setAiRunning] = useState(false);
   const [rewarded, setRewarded] = useState(false);
   const [setupActiveUid, setSetupActiveUid] = useState<string | null>(null);
@@ -91,6 +95,21 @@ export default function GamePage() {
     const t = setTimeout(() => setAckSecondsLeft(s => s - 1), 1000);
     return () => clearTimeout(t);
   }, [ackPromise, ackSecondsLeft]);
+
+  // ── Coin flip subscription ───────────────────────────────────────────────────
+  useEffect(() => {
+    return subscribeToFlips(result => { pendingFlips.current.push(result); });
+  }, []);
+
+  // Drain buffered flips whenever game state advances (flips are sync, state update is async)
+  useEffect(() => {
+    if (!game || pendingFlips.current.length === 0) return;
+    const flips = [...pendingFlips.current];
+    pendingFlips.current = [];
+    setCoinFlipDisplay(flips);
+    if (coinFlipTimer.current) clearTimeout(coinFlipTimer.current);
+    coinFlipTimer.current = setTimeout(() => setCoinFlipDisplay(null), 2200);
+  }, [game]);
 
   const closePreview = () => setPreview(null);
 
@@ -568,6 +587,47 @@ export default function GamePage() {
                 <button onClick={closePreview} className="w-full py-2.5 bg-gray-700 text-white rounded-xl">Back</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Coin flip overlay ────────────────────────────────────── */}
+      {coinFlipDisplay && (
+        <div
+          className="fixed inset-0 z-[55] flex items-center justify-center"
+          style={{ pointerEvents: 'none' }}
+        >
+          <div
+            className="bg-gray-950/95 border-2 border-yellow-500 rounded-2xl px-8 py-5 flex flex-col items-center gap-3 shadow-2xl"
+            style={{ pointerEvents: 'auto' }}
+            onClick={() => { setCoinFlipDisplay(null); if (coinFlipTimer.current) clearTimeout(coinFlipTimer.current); }}
+          >
+            <p className="text-xs text-yellow-400 uppercase tracking-widest font-bold">
+              🪙 Coin Flip{coinFlipDisplay.length > 1 ? `s (×${coinFlipDisplay.length})` : ''}
+            </p>
+            <div className="flex gap-4">
+              {coinFlipDisplay.map((heads, i) => (
+                <div
+                  key={i}
+                  className={`animate-coin-flip w-20 h-20 rounded-full flex items-center justify-center text-4xl border-4 font-black select-none ${
+                    heads
+                      ? 'bg-yellow-400 border-yellow-200 text-yellow-900'
+                      : 'bg-gray-600 border-gray-400 text-white'
+                  }`}
+                  style={{ animationDelay: `${i * 0.18}s` }}
+                >
+                  {heads ? '★' : '✕'}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-4 justify-center">
+              {coinFlipDisplay.map((heads, i) => (
+                <p key={i} className={`text-lg font-black tracking-widest ${heads ? 'text-yellow-300' : 'text-gray-400'}`}>
+                  {heads ? 'HEADS' : 'TAILS'}
+                </p>
+              ))}
+            </div>
+            <p className="text-[10px] text-gray-600">tap to dismiss</p>
           </div>
         </div>
       )}

@@ -8,7 +8,17 @@ import { isBasicPokemon, isPokemon, makeUID, makeCardInstance } from '@/lib/card
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-export function flip(): boolean { return Math.random() < 0.5; }
+// Flip subscriber — lets the UI show a coin animation for every flip() call.
+let _flipSubs: Array<(result: boolean) => void> = [];
+export function subscribeToFlips(fn: (result: boolean) => void): () => void {
+  _flipSubs.push(fn);
+  return () => { _flipSubs = _flipSubs.filter(f => f !== fn); };
+}
+export function flip(): boolean {
+  const result = Math.random() < 0.5;
+  _flipSubs.forEach(fn => fn(result));
+  return result;
+}
 
 function capitalize(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
 

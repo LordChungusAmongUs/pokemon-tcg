@@ -117,6 +117,18 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* ── Coin flip animation ─────────────────────────────────────────────────── */
+@keyframes coinFlip {
+  0%   { transform: rotateY(0deg)   scaleX(1)    scaleY(0.6); opacity: 0.4; }
+  25%  { transform: rotateY(360deg) scaleX(0.1)  scaleY(1.1); opacity: 1;   }
+  55%  { transform: rotateY(630deg) scaleX(1.05) scaleY(1.05); }
+  80%  { transform: rotateY(700deg) scaleX(0.98) scaleY(1.02); }
+  100% { transform: rotateY(720deg) scaleX(1)    scaleY(1);   opacity: 1;   }
+}
+.animate-coin-flip {
+  animation: coinFlip 0.75s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -230,6 +230,34 @@ export const STARTER_DECKS: StarterDeck[] = [
     ],
   },
 
+  {
+    id: 'starter-lightning-bug',
+    name: 'Lightning Bug',
+    description: 'Base Set. Pikachu and Magnemite shock from range while the Caterpie and Weedle bug lines overwhelm with numbers.',
+    type: 'Lightning/Grass',
+    requiredSet: 'Base',
+    prerequisiteSet: null,
+    cardIds: [
+      ...r('base1-3',  1), // Chansey
+      ...r('base1-53', 3), // Magnemite
+      ...r('base1-58', 4), // Pikachu
+      ...r('base1-17', 1), // Beedrill
+      ...r('base1-33', 2), // Kakuna
+      ...r('base1-69', 4), // Weedle
+      ...r('base1-54', 1), // Metapod
+      ...r('base1-45', 4), // Caterpie
+      ...r('base1-87', 1), // Pokédex
+      ...r(PLUSPOWER,  1), // PlusPower
+      ...r('base1-80', 2), // Defender
+      ...r(ENERGY_RET, 2), // Energy Retrieval
+      ...r(SWITCH,     1), // Switch
+      ...r(GOW,        2), // Gust of Wind
+      ...r(BILL,       3), // Bill
+      ...r(E_GRASS,   16), // Grass Energy
+      ...r(E_LIGHTNING,12), // Lightning Energy
+    ],
+  },
+
   // ── JUNGLE THEME DECKS (unlock: Base 75%) ────────────────────────────────
   {
     id: 'jungle-power-reserve',

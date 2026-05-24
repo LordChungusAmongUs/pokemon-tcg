@@ -401,31 +401,29 @@ export const STARTER_DECKS: StarterDeck[] = [
   {
     id: 'bs2-hot-water',
     name: 'Hot Water',
-    description: 'Base Set 2 reprints. Blastoise, Gyarados, and Poliwrath bring a devastating Water assault.',
-    type: 'Water',
+    description: 'Water/Fire assault. Poliwrath and the Doduo line control the field while Charmander and Magmar bring the heat.',
+    type: 'Water/Fire',
     requiredSet: 'Base',
     prerequisiteSet: 'Base',
     prerequisitePct: 1.0,
     cardIds: [
-      ...r('base4-93', 4), // Squirtle
-      ...r('base4-63', 2), // Wartortle
-      ...r('base4-2',  1), // Blastoise
-      ...r('base4-50', 4), // Magikarp
-      ...r('base4-7',  1), // Gyarados
-      ...r('base4-88', 4), // Poliwag
-      ...r('base4-57', 2), // Poliwhirl
       ...r('base4-15', 1), // Poliwrath
-      ...r('base4-95', 4), // Staryu
-      ...r('base4-94', 1), // Starmie
-      ...r(BS2_BILL,   2),
-      ...r(BS2_OAK,    2),
-      ...r(BS2_POTION, 2),
-      ...r(BS2_GOW,    1),
-      ...r(BS2_EREM,   1),
-      ...r(BS2_PPLUS,  1),
-      ...r(BS2_SWITCH, 1),
-      ...r(E_WATER,   22),
-      ...r(BS2_DCE,    4),
+      ...r('base4-57', 2), // Poliwhirl
+      ...r('base4-88', 4), // Poliwag
+      ...r('base4-37', 1), // Dodrio
+      ...r('base4-72', 3), // Doduo
+      ...r('base4-51', 2), // Magmar
+      ...r('base4-35', 1), // Charmeleon
+      ...r('base4-69', 3), // Charmander
+      ...r('base4-76', 3), // Goldeen
+      ...r('base4-106',1), // Pokémon Trader
+      ...r('base4-110',2), // Energy Retrieval
+      ...r(BS2_POTION, 3), // Potion
+      ...r('base4-121',2), // Poké Ball
+      ...r(BS2_EREM,   3), // Energy Removal
+      ...r(BS2_GOW,    1), // Gust of Wind
+      ...r(E_WATER,   15), // Water Energy
+      ...r(E_FIRE,    13), // Fire Energy
     ],
   },
   {

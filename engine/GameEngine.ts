@@ -396,6 +396,15 @@ export function retreat(state: GameState, benchSlot: number): GameState {
   if (player.hasAttackedThisTurn) return state;
   if (!player.active) return state;
 
+  // ── Confusion check for retreat ─────────────────────────────────────────
+  if (player.active.statusCondition === 'Confused') {
+    const heads = flip();
+    if (!heads) {
+      return log(state, `😵 ${player.active.card.name} is Confused — coin flip tails! Can't retreat.`);
+    }
+    state = log(state, `😵 ${player.active.card.name} is Confused — coin flip heads! Retreat succeeds.`);
+  }
+
   const dodrioReduction = player.bench.filter(b => b !== null && isActivePowerOn(b, 'Retreat Aid', state)).length;
   const cost = Math.max(0, player.active.card.retreatCost.length - dodrioReduction);
   const totalEnergy = player.active.attachedEnergy.length;
@@ -433,7 +442,8 @@ function applyRetreat(state: GameState, benchSlot: number, energyUids: string[])
     ? player.active.attachedEnergy.filter(e => energyUids.includes(e.uid))
     : [];
   const remainingEnergy = player.active.attachedEnergy.filter(e => !energyUids.includes(e.uid));
-  const retreatedPokemon = { ...player.active, attachedEnergy: remainingEnergy };
+  // Status conditions are cured when a Pokémon retreats to the bench
+  const retreatedPokemon = { ...player.active, attachedEnergy: remainingEnergy, statusCondition: null };
 
   const newBench = [...player.bench];
   newBench[benchSlot] = retreatedPokemon;
@@ -543,11 +553,13 @@ export function attack(state: GameState, attackIndex: number): GameState {
       const selfDamaged = { ...attacker.active, damageTaken: attacker.active.damageTaken + 30 };
       let next = log(
         { ...state, [active]: { ...attacker, active: selfDamaged, hasAttackedThisTurn: true } },
-        `${attacker.active.card.name} is Confused! Coin flip tails — hits itself for 30!`,
+        `😵 ${attacker.active.card.name} is Confused! Coin flip tails — hits itself for 30 damage!`,
       );
       next = resolveKO(next, active, null);
       return checkWinConditions(next);
     }
+    // Heads: attack proceeds normally — log it then fall through
+    state = log(state, `😵 ${attacker.active.card.name} is Confused — coin flip heads! Attack proceeds.`);
   }
 
   // ── Leer / "can't attack" check ─────────────────────────────────────────

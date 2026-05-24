@@ -123,9 +123,13 @@ export default function GamePage() {
     setRewarded(true);
     const won = game.winner === 'player1';
     awardGameResult(won, game.mode === 'local-2p' ? 'vs-ai' : 'vs-ai');
-    // Award 1 random Wizards Black Star Promo on AI win
+    // Award 1 random Wizards Black Star Promo on AI win — #1-18 and #20-28 only
     if (won && game.mode === 'vs-ai') {
-      const promos = ALL_CARDS.filter(c => c.set === 'Wizards Black Star Promos');
+      const PROMO_RANGE = new Set([
+        ...Array.from({ length: 18 }, (_, i) => `basep-${i + 1}`),
+        ...Array.from({ length: 9 },  (_, i) => `basep-${i + 20}`),
+      ]);
+      const promos = ALL_CARDS.filter(c => c.set === 'Wizards Black Star Promos' && PROMO_RANGE.has(c.id));
       if (promos.length > 0) {
         const pick = promos[Math.floor(Math.random() * promos.length)];
         addToCollection([pick.id]);

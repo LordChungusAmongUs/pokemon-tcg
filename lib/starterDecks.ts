@@ -546,28 +546,31 @@ export const STARTER_DECKS: StarterDeck[] = [
   {
     id: 'rocket-trouble',
     name: "Rocket's Trouble",
-    description: "Official WotC Team Rocket theme deck. Dark Raichu and Dark Gyarados strike fast and hard.",
-    type: 'Lightning/Water',
+    description: "Team Rocket Psychic/Grass disruption. Dark Arbok and the Abra line apply Psychic pressure while Meowth and Ekans cause chaos.",
+    type: 'Psychic/Grass',
     requiredSet: 'Team Rocket',
     prerequisiteSet: 'Fossil',
     cardIds: [
-      ...r('base1-58', 4), // Pikachu
-      ...r('base5-83', 2), // Dark Raichu
-      ...r('base1-53', 4), // Magnemite
-      ...r('base5-11', 2), // Dark Magneton
-      ...r('base1-35', 4), // Magikarp
-      ...r('base5-8',  2), // Dark Gyarados
-      ...r('base1-51', 4), // Koffing
-      ...r('base5-14', 2), // Dark Weezing
-      ...r(HCTR,         2),
-      ...r(ROCKETS_SA,   2),
-      ...r(BILL,         2),
-      ...r(POTION,       3),
-      ...r(SWITCH,       2),
-      ...r(GOW,          1),
-      ...r(E_LIGHTNING, 12),
-      ...r(E_WATER,      8),
-      ...r(DCE,          4),
+      ...r('base5-2',  1), // Dark Arbok (holo)
+      ...r('base5-56', 2), // Ekans (Rocket)
+      ...r('base5-62', 2), // Meowth (Rocket)
+      ...r('base1-27', 2), // Farfetch'd
+      ...r('base1-69', 2), // Weedle
+      ...r('base5-39', 2), // Dark Kadabra
+      ...r('base5-49', 2), // Abra (Rocket)
+      ...r('base1-43', 2), // Abra
+      ...r('base1-32', 1), // Kadabra
+      ...r('base1-49', 3), // Drowzee
+      ...r('base1-31', 1), // Jynx
+      ...r('base1-29', 1), // Haunter
+      ...r(SWITCH,       1), // Switch
+      ...r(POTION,       2), // Potion
+      ...r(GOW,          1), // Gust of Wind
+      ...r('base5-73',   1), // The Boss's Way
+      ...r(BILL,         1), // Bill
+      ...r('base5-81',   1), // Full Heal Energy
+      ...r(E_GRASS,     10), // Grass Energy
+      ...r(E_PSYCHIC,   18), // Psychic Energy
     ],
   },
   {

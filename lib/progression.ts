@@ -1,3 +1,5 @@
+import { ALL_CARDS } from './cardUtils';
+
 export const XP_REWARDS = {
   playBasic: 5,
   evolve: 10,
@@ -78,7 +80,7 @@ export const SET_PROGRESSION: Array<{ name: string; prerequisite: string | null 
   { name: 'Gym Challenge',           prerequisite: 'Gym Heroes' },
   { name: 'Neo Genesis',             prerequisite: 'Gym Challenge' },
   { name: 'Neo Discovery',           prerequisite: 'Neo Genesis' },
-  { name: 'Wizards Black Star Promos', prerequisite: 'Neo Discovery' },
+  { name: 'Wizards Black Star Promos', prerequisite: null },
   { name: 'Neo Revelation',          prerequisite: 'Neo Discovery' },
   { name: 'Neo Destiny',             prerequisite: 'Neo Revelation' },
   { name: 'Expedition Base Set',     prerequisite: 'Neo Destiny' },
@@ -99,7 +101,7 @@ export const PACK_COST = 30;
 export const PACK_BUNDLE_5 = 125;
 export const PACK_BUNDLE_10 = 250;
 export const THEME_DECK_COST = 150;
-export const STARTING_CREDITS = 500;
+export const STARTING_CREDITS = 50000;
 
 export const SINGLE_COSTS: Record<string, number> = {
   Common: 3,
@@ -169,4 +171,20 @@ export function pickPackCards(setCards: { id: string; rarity: string }[]): strin
     ...pickN(uncommons, setCards, 3),
     ...pickN(commons, setCards, 5),
   ];
+}
+
+// Generate all card IDs for one booster pack of a given set (9 non-energy + 2 energy)
+export function generatePackCards(setName: string): string[] {
+  const allSetCards = ALL_CARDS.filter(c => c.set === setName);
+  const basicEnergyPool = allSetCards.filter(c => c.supertype === 'Energy' && !c.rarity);
+  const setCards = allSetCards
+    .filter(c => !basicEnergyPool.some(e => e.id === c.id))
+    .map(c => ({ id: c.id, rarity: c.rarity || 'Common' }));
+  if (setCards.length === 0) return [];
+  const ids = [...pickPackCards(setCards)];
+  if (basicEnergyPool.length > 0) {
+    const pickEnergy = () => basicEnergyPool[Math.floor(Math.random() * basicEnergyPool.length)].id;
+    ids.push(pickEnergy(), pickEnergy());
+  }
+  return ids;
 }

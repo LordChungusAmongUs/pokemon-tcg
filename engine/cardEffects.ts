@@ -60,6 +60,8 @@ export interface AttackEffects {
   selfStatus: StatusCondition | null; // apply to ATTACKER
   drawCards: number;
   coinMsg: string;
+  cantAttackSelf: boolean; // Leer: if heads, defender can't attack attacker next turn
+  selfHeal: number;        // remove this many damage from attacker if damage was dealt (Leech Seed = 10)
 }
 
 export function computeAttackEffects(
@@ -87,6 +89,8 @@ export function computeAttackEffects(
     selfStatus: null,
     drawCards: 0,
     coinMsg: '',
+    cantAttackSelf: false,
+    selfHeal: 0,
   };
 
   const cardId = attackerPokemon.card.id;
@@ -132,18 +136,8 @@ export function computeAttackEffects(
     return res;
   }
 
-  // ── Quick Attack: "If heads, X damage plus Y more; if tails, X damage." ──
-  const quickM = text.match(/if heads,\s*this attack does\s*\d+\s*(?:damage\s*)?plus\s*(\d+)\s*more damage;\s*if tails,\s*this attack does\s*\d+\s*damage/i);
-  if (quickM) {
-    const bonus = parseInt(quickM[1]);
-    const heads = flip();
-    res.bonusDamage = heads ? bonus : 0;
-    res.coinMsg = `(coin: ${heads ? `heads +${bonus}` : 'tails'})`;
-    res.defenderStatus = null;
-    return res;
-  }
-
-  // ── Thrash-style: "If heads, X+Y more damage; if tails, X and [Name] does Z to itself." ──
+  // ── Thrash-style: "If heads, +Y more damage; if tails, [Name] does Z to itself." ──
+  // Must be checked BEFORE Quick Attack — Thunderpunch matches both patterns but needs recoil on tails.
   const thrashM = text.match(/if heads.*?(\d+)\s*more damage.*?if tails.*?does\s+(\d+)\s+damage to itself/i);
   if (thrashM) {
     const bonus = parseInt(thrashM[1]);
@@ -151,7 +145,18 @@ export function computeAttackEffects(
     const heads = flip();
     if (heads) res.bonusDamage = bonus;
     else res.recoil = recoilAmt;
-    res.coinMsg = `(coin: ${heads ? 'heads' : `tails, ${recoilAmt} recoil`})`;
+    res.coinMsg = `(coin: ${heads ? `heads +${bonus}` : `tails, ${recoilAmt} recoil`})`;
+    res.defenderStatus = null;
+    return res;
+  }
+
+  // ── Quick Attack: "If heads, X damage plus Y more; if tails, X damage." ──
+  const quickM = text.match(/if heads,\s*this attack does\s*\d+\s*(?:damage\s*)?plus\s*(\d+)\s*more damage;\s*if tails,\s*this attack does\s*\d+\s*damage/i);
+  if (quickM) {
+    const bonus = parseInt(quickM[1]);
+    const heads = flip();
+    res.bonusDamage = heads ? bonus : 0;
+    res.coinMsg = `(coin: ${heads ? `heads +${bonus}` : 'tails'})`;
     res.defenderStatus = null;
     return res;
   }
@@ -271,6 +276,22 @@ export function computeAttackEffects(
   const drawM = text.match(/draw\s+(?:a\s+card|(\d+)\s+cards?)/i);
   if (drawM) res.drawCards = drawM[1] ? parseInt(drawM[1]) : 1;
 
+  // ── Leer — defending Pokémon can't attack attacker next turn (coin flip) ─
+  if (atk.name === 'Leer') {
+    if (flip()) {
+      res.cantAttackSelf = true;
+      res.coinMsg = (res.coinMsg ? res.coinMsg + ' ' : '') + 'Heads! Defending Pokémon can\'t attack next turn!';
+    } else {
+      res.coinMsg = (res.coinMsg ? res.coinMsg + ' ' : '') + 'Tails! Leer has no effect.';
+    }
+  }
+
+  // ── Self-heal (Leech Seed, etc.) ─────────────────────────────────────────
+  // "remove 1 damage counter from [attacker]" — not "from the Defending Pokémon"
+  if (/remove\s+(?:1|a)\s+damage counter(?!\s+from (?:the\s+)?defending)/i.test(text)) {
+    res.selfHeal = 10;
+  }
+
   return res;
 }
 
@@ -314,26 +335,7 @@ export function handleTrainerEffect(
 
   // Energy Removal / Gust of Wind / Pokédex are intercepted in playTrainer before reaching here
 
-  // ── Super Energy Removal ──────────────────────────────────────────────────
-  if (name === 'super energy removal' || id === 'base1-79') {
-    const p = player();
-    const o = opp();
-    const myEnergy = p.active?.attachedEnergy ?? [];
-    if (myEnergy.length === 0) return logMsg(after, `${playerName} can't use Super Energy Removal — no energy to discard.`);
-    if (!o.active || o.active.attachedEnergy.length === 0) return logMsg(after, `${playerName} plays Super Energy Removal, but ${oppName} has no energy.`);
-    // Discard 1 own energy
-    const [myDiscard, ...myRest] = p.active!.attachedEnergy;
-    const newMyActive = { ...p.active!, attachedEnergy: myRest };
-    // Remove up to 2 from opponent
-    const [e1, e2, ...oppRest] = o.active.attachedEnergy;
-    const newOppActive = { ...o.active, attachedEnergy: oppRest };
-    after = {
-      ...after,
-      [playerId]: { ...p, active: newMyActive },
-      [oppId]: { ...o, active: newOppActive },
-    };
-    return logMsg(after, `${playerName} plays Super Energy Removal! Discards 2 energy from ${o.active.card.name}.`);
-  }
+  // Super Energy Removal is now intercepted as a pendingTrainer in GameEngine.ts
 
 
   // ── Full Heal ─────────────────────────────────────────────────────────────
@@ -472,16 +474,7 @@ export function handleTrainerEffect(
     return after;
   }
 
-  // ── Maintenance ───────────────────────────────────────────────────────────
-  if (name === 'maintenance' || id === 'base1-83') {
-    const p = player();
-    if (p.hand.length < 2) return logMsg(after, `${playerName} can't use Maintenance — need 2 cards to shuffle.`);
-    const [d1, d2, ...restHand] = p.hand;
-    const newDeck = shuffle([...p.deck, d1, d2]);
-    after = { ...after, [playerId]: { ...p, hand: restHand, deck: newDeck } };
-    after = drawCard(after, playerId);
-    return logMsg(after, `${playerName} shuffles 2 cards into deck and draws 1.`);
-  }
+  // Maintenance — intercepted in playTrainer for player choice
 
   // ── Computer Search ───────────────────────────────────────────────────────
   if (name === 'computer search' || id === 'base1-71') {
@@ -501,19 +494,7 @@ export function handleTrainerEffect(
     return after;
   }
 
-  // ── Item Finder ───────────────────────────────────────────────────────────
-  if (name === 'item finder' || id === 'base1-74') {
-    const p = player();
-    if (p.hand.length < 2) return logMsg(after, `${playerName} can't use Item Finder — need 2 cards to discard.`);
-    const trainers = p.discard.filter(c => c.card.supertype === 'Trainer');
-    if (trainers.length === 0) return logMsg(after, `${playerName} uses Item Finder but has no trainers in discard.`);
-    const [d1, d2, ...restHand] = p.hand;
-    const found = trainers[0];
-    const newDiscard = p.discard.filter(c => c.uid !== found.uid).concat([d1, d2]);
-    after = logMsg({ ...after, [playerId]: { ...p, hand: [...restHand, found], discard: newDiscard } },
-      `${playerName} uses Item Finder to recover ${found.card.name}!`);
-    return after;
-  }
+  // Item Finder — intercepted in playTrainer for player choice
 
   // ── Lass ──────────────────────────────────────────────────────────────────
   if (name === 'lass' || id === 'base1-75') {
@@ -567,28 +548,9 @@ export function handleTrainerEffect(
     return after;
   }
 
-  // ── Pokémon Breeder ───────────────────────────────────────────────────────
-  if (name === 'pokémon breeder' || id === 'base1-76') {
-    // Simplified: can evolve a Stage 2 from hand onto a Stage 1 on bench,
-    // ignoring turn-played restriction (but still must have matching Stage 1)
-    return logMsg(after, `${playerName} plays Pokémon Breeder. (Use evolve action to apply to a Stage 1 on bench.)`);
-  }
+  // Pokémon Breeder — intercepted in playTrainer for player choice
 
-  // ── Pokémon Trader ────────────────────────────────────────────────────────
-  if (name === 'pokémon trader' || id === 'base1-77') {
-    const p = player();
-    const handPoke = p.hand.filter(c => isPokemon(c.card));
-    const deckPoke = p.deck.filter(c => isPokemon(c.card));
-    if (handPoke.length > 0 && deckPoke.length > 0) {
-      const swap = handPoke[0];
-      const found = deckPoke[Math.floor(Math.random() * deckPoke.length)];
-      const newHand = p.hand.filter(c => c.uid !== swap.uid).concat([found]);
-      const newDeck = shuffle(p.deck.filter(c => c.uid !== found.uid).concat([swap]));
-      after = logMsg({ ...after, [playerId]: { ...p, hand: newHand, deck: newDeck } },
-        `${playerName} trades ${swap.card.name} for ${found.card.name} from deck.`);
-    }
-    return after;
-  }
+  // Pokémon Trader — intercepted in playTrainer for player choice
 
 
   // ── Mr. Fuji ──────────────────────────────────────────────────────────────
@@ -608,20 +570,7 @@ export function handleTrainerEffect(
     return after;
   }
 
-  // ── Recycle ───────────────────────────────────────────────────────────────
-  if (name === 'recycle' || id === 'base3-61') {
-    const p = player();
-    const heads = flip();
-    if (heads && p.discard.length > 0) {
-      const chosen = p.discard[p.discard.length - 1];
-      const newDiscard = p.discard.slice(0, -1);
-      after = logMsg({ ...after, [playerId]: { ...p, deck: [chosen, ...p.deck], discard: newDiscard } },
-        `${playerName} plays Recycle (heads!) — ${chosen.card.name} back on top of deck.`);
-    } else {
-      after = logMsg(after, `${playerName} plays Recycle (tails) — no effect.`);
-    }
-    return after;
-  }
+  // Recycle — intercepted in playTrainer for coin flip + player choice
 
   // ── Rocket's Sneak Attack ─────────────────────────────────────────────────
   if (name === "rocket's sneak attack" || id === 'base5-16') {
@@ -664,6 +613,28 @@ export function handleTrainerEffect(
       const newDiscard = p.discard.filter(c => c.uid !== card.uid);
       after = logMsg({ ...after, [playerId]: { ...p, bench: newBench, discard: newDiscard } },
         `${playerName} plays ${card.card.name} onto the bench.`);
+    }
+    return after;
+  }
+
+  // ── Poké Ball ──────────────────────────────────────────────────────────────
+  if (name === 'poké ball' || name === 'pokeball' || id === 'base2-64' || id === 'base4-121') {
+    const p = player();
+    const heads = flip();
+    if (heads && p.deck.length > 0) {
+      const pokemonInDeck = p.deck.filter(c => isPokemon(c.card));
+      if (pokemonInDeck.length > 0) {
+        const chosen = pokemonInDeck[Math.floor(Math.random() * pokemonInDeck.length)];
+        const newDeck = shuffle(p.deck.filter(c => c.uid !== chosen.uid));
+        after = logMsg({ ...after, [playerId]: { ...p, hand: [...p.hand, chosen], deck: newDeck } },
+          `${playerName} uses Poké Ball (heads!) — found ${chosen.card.name}!`);
+      } else {
+        const newDeck = shuffle([...p.deck]);
+        after = logMsg({ ...after, [playerId]: { ...p, deck: newDeck } },
+          `${playerName} uses Poké Ball (heads!) but found no Pokémon in deck.`);
+      }
+    } else {
+      after = logMsg(after, `${playerName} uses Poké Ball — tails! No effect.`);
     }
     return after;
   }

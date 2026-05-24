@@ -5,8 +5,13 @@ import {
   initGame, confirmSetup, doDrawPhase, drawCard,
   playBasicToBench, playActiveFromBench,
   attachEnergy, retreat, attack,
-  endTurn, playTrainer, evolve, resolvePendingTrainer,
+  endTurn, playTrainer, evolve, resolvePendingTrainer, resolvePokedex, resolvePokeball,
+  useVileplumHeal, useEnergyBurn, useRainDance, useEnergyTrans,
+  useDamageSwap, useGengarCurse, useBuzzap,
+  resolvePokemonTrader, resolveMaintenance, resolveItemFinder, resolveNightlyGarbageRun,
+  resolvePokemonBreeder, resolveRecycle, confirmRetreat,
 } from '@/engine/GameEngine';
+import type { EnergyType } from '@/engine/GameState';
 import { XP_REWARDS } from '@/lib/progression';
 
 function awardXP(amount: number, activePlayer: 'player1' | 'player2') {
@@ -41,6 +46,23 @@ interface GameStore {
   resolveTrainerAction: (choice: number) => void;
   evolveAction: (handUid: string, targetUid: string) => void;
   confirmSetupAction: (activeUid: string, benchUids: string[]) => void;
+  // Active power actions
+  vileplumHealAction: () => void;
+  energyBurnAction: () => void;
+  rainDanceAction: (energyHandUid: string, targetUid: string) => void;
+  energyTransAction: (fromUid: string, energyIdx: number, toUid: string) => void;
+  damageSwapAction: (fromUid: string, toUid: string) => void;
+  gengarCurseAction: (fromOppUid: string, toOppUid: string) => void;
+  buzzapAction: (benchSlot: number, targetUid: string, energyType: EnergyType) => void;
+  resolvePokedexAction: (orderedUids: string[]) => void;
+  resolvePokeballAction: (chosenUid: string) => void;
+  resolvePokemonTraderAction: (uid: string) => void;
+  resolveMaintenanceAction: (uid: string) => void;
+  resolveItemFinderAction: (uid: string) => void;
+  resolveNightlyGarbageRunAction: (uid: string | null) => void;
+  resolvePokemonBreederAction: (uid: string) => void;
+  resolveRecycleAction: (uid: string) => void;
+  confirmRetreatAction: (energyUids: string[]) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -127,4 +149,50 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const playerId = game.setupStep === 'p1-setup' ? 'player1' : 'player2';
     set({ game: confirmSetup(game, playerId, activeUid, benchUids) });
   },
+
+  vileplumHealAction: () => set(s => ({ game: s.game ? useVileplumHeal(s.game) : null })),
+  energyBurnAction: () => set(s => ({ game: s.game ? useEnergyBurn(s.game) : null })),
+  rainDanceAction: (energyHandUid, targetUid) => set(s => ({
+    game: s.game ? useRainDance(s.game, energyHandUid, targetUid) : null,
+    selectedHandUid: null,
+  })),
+  energyTransAction: (fromUid, energyIdx, toUid) => set(s => ({
+    game: s.game ? useEnergyTrans(s.game, fromUid, energyIdx, toUid) : null,
+  })),
+  damageSwapAction: (fromUid, toUid) => set(s => ({
+    game: s.game ? useDamageSwap(s.game, fromUid, toUid) : null,
+  })),
+  gengarCurseAction: (fromOppUid, toOppUid) => set(s => ({
+    game: s.game ? useGengarCurse(s.game, fromOppUid, toOppUid) : null,
+  })),
+  buzzapAction: (benchSlot, targetUid, energyType) => set(s => ({
+    game: s.game ? useBuzzap(s.game, benchSlot, targetUid, energyType) : null,
+  })),
+  resolvePokedexAction: (orderedUids) => set(s => ({
+    game: s.game ? resolvePokedex(s.game, orderedUids) : null,
+  })),
+  resolvePokeballAction: (chosenUid) => set(s => ({
+    game: s.game ? resolvePokeball(s.game, chosenUid) : null,
+  })),
+  resolvePokemonTraderAction: (uid) => set(s => ({
+    game: s.game ? resolvePokemonTrader(s.game, uid) : null,
+  })),
+  resolveMaintenanceAction: (uid) => set(s => ({
+    game: s.game ? resolveMaintenance(s.game, uid) : null,
+  })),
+  resolveItemFinderAction: (uid) => set(s => ({
+    game: s.game ? resolveItemFinder(s.game, uid) : null,
+  })),
+  resolveNightlyGarbageRunAction: (uid) => set(s => ({
+    game: s.game ? resolveNightlyGarbageRun(s.game, uid) : null,
+  })),
+  resolvePokemonBreederAction: (uid) => set(s => ({
+    game: s.game ? resolvePokemonBreeder(s.game, uid) : null,
+  })),
+  resolveRecycleAction: (uid) => set(s => ({
+    game: s.game ? resolveRecycle(s.game, uid) : null,
+  })),
+  confirmRetreatAction: (energyUids) => set(s => ({
+    game: s.game ? confirmRetreat(s.game, energyUids) : null,
+  })),
 }));

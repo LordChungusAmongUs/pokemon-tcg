@@ -8,6 +8,7 @@ import { getAvailableAIDecks } from '@/lib/starterDecks';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { computeLevel } from '@/lib/progression';
+import { STARTER_DECKS } from '@/lib/starterDecks';
 import CardImage from '@/components/cards/CardImage';
 
 const BROWSE_CARDS = [...ALL_CARDS, ...BASIC_ENERGY_CARDS];
@@ -23,7 +24,7 @@ function deckToCards(deck: LocalDeck): CardData[] {
 }
 
 export default function HomePage() {
-  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount, prereleaseInvites, freeVouchers, collection, pendingLevelUp, dismissLevelUp } = useAuthStore();
+  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount, prereleaseInvites, freeVouchers, collection, pendingLevelUp, dismissLevelUp, onboardingStep, onboardingPromoCardId, advanceOnboarding } = useAuthStore();
   const [localDecks, setLocalDecks] = useState<LocalDeck[]>([]);
   const [p1Deck, setP1Deck] = useState('');
   const [p2Deck, setP2Deck] = useState('');
@@ -75,6 +76,81 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950 flex items-center justify-center p-4">
+
+      {/* ── Onboarding modals ── */}
+      {onboardingStep === 1 && (() => {
+        const deck = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
+        const allIds = deck?.cardIds.filter(id => !id.startsWith('basic-')) ?? [];
+        const allCards = allIds.map(id => BROWSE_CARDS.find(c => c.id === id)).filter(Boolean) as import('@/engine/GameState').CardData[];
+        return (
+          <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-900 border-2 border-yellow-500 rounded-2xl p-6 max-w-2xl w-full text-center space-y-4">
+              <p className="text-xs text-yellow-400 uppercase tracking-widest font-bold">Welcome, Trainer!</p>
+              <h2 className="text-2xl font-black text-white">Starter Deck</h2>
+              <p className="text-sm text-gray-300">You received the <span className="text-yellow-300 font-bold">Fists &amp; Fire</span> deck — Machamp and Fire-type Pokémon ready to battle!</p>
+              <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 max-h-[55vh] overflow-y-auto p-1">
+                {allCards.map((c, i) => <CardImage key={i} card={c} small />)}
+              </div>
+              <button onClick={() => advanceOnboarding()} className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-lg">
+                Awesome! →
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {onboardingStep === 2 && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border-2 border-blue-500 rounded-2xl p-6 max-w-sm w-full text-center space-y-4">
+            <p className="text-xs text-blue-400 uppercase tracking-widest font-bold">Free Packs!</p>
+            <h2 className="text-2xl font-black text-white">3 Booster Packs</h2>
+            <div className="flex justify-center gap-3 py-2">
+              {[0,1,2].map(i => (
+                <div key={i} className="w-16 h-24 bg-gradient-to-b from-blue-600 to-blue-900 rounded-lg border-2 border-blue-400 flex items-center justify-center text-3xl shadow-lg">📦</div>
+              ))}
+            </div>
+            <p className="text-sm text-gray-300">3 free <span className="text-blue-300 font-bold">Base Set</span> booster packs are waiting in your Shop inventory. Open them one at a time or all at once!</p>
+            <button onClick={() => advanceOnboarding()} className="w-full py-3 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-xl text-lg">
+              Sweet! →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {onboardingStep === 3 && (() => {
+        const promoCard = onboardingPromoCardId ? BROWSE_CARDS.find(c => c.id === onboardingPromoCardId) : null;
+        return (
+          <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-900 border-2 border-purple-500 rounded-2xl p-6 max-w-sm w-full text-center space-y-4">
+              <p className="text-xs text-purple-400 uppercase tracking-widest font-bold">Special Card!</p>
+              <h2 className="text-2xl font-black text-white">Black Star Promo</h2>
+              <p className="text-sm text-gray-300">You received an exclusive <span className="text-purple-300 font-bold">Wizards Black Star Promo</span> card!</p>
+              {promoCard && (
+                <div className="flex justify-center">
+                  <CardImage card={promoCard} />
+                </div>
+              )}
+              <button onClick={() => advanceOnboarding(true)} className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-lg">
+                Add to Collection! ✨
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {onboardingStep === 4 && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border-2 border-green-500 rounded-2xl p-6 max-w-sm w-full text-center space-y-4">
+            <p className="text-xs text-green-400 uppercase tracking-widest font-bold">Bonus!</p>
+            <h2 className="text-2xl font-black text-white">Theme Deck Voucher</h2>
+            <div className="text-6xl py-2">🎟</div>
+            <p className="text-sm text-gray-300">You received a <span className="text-green-300 font-bold">Theme Deck Voucher</span> — redeem it in the Shop to get any theme deck for free!</p>
+            <button onClick={() => advanceOnboarding()} className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-lg">
+              Let&apos;s Play! 🎉
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Level-up reward modal */}
       {pendingLevelUp && (
@@ -177,7 +253,7 @@ export default function HomePage() {
             </Link>
           )}
           <Link href="/prerelease"
-            className={`relative rounded-2xl p-4 text-center transition-all col-span-2 ${
+            className={`relative rounded-2xl p-4 text-center transition-all ${
               prereleaseInvites.length > 0
                 ? 'bg-purple-600 hover:bg-purple-500 text-white'
                 : 'bg-white/10 hover:bg-white/20'
@@ -197,6 +273,16 @@ export default function HomePage() {
                 ? `${freeVouchers.length} deck voucher${freeVouchers.length > 1 ? 's' : ''} in Shop`
                 : 'Complete 60% of any set'}
             </div>
+          </Link>
+          <Link href="/draft" className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all">
+            <div className="text-3xl">🎴</div>
+            <div className="font-semibold mt-1">Draft</div>
+            <div className="text-xs text-gray-400">5 packs per player</div>
+          </Link>
+          <Link href="/sealed" className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all">
+            <div className="text-3xl">📦</div>
+            <div className="font-semibold mt-1">Sealed</div>
+            <div className="text-xs text-gray-400">10 packs, build a deck</div>
           </Link>
         </div>
 

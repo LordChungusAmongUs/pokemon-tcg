@@ -1,7 +1,7 @@
 import type { GameState, PlayerState, InPlayPokemon } from '@/engine/GameState';
 import {
   playBasicToBench, attachEnergy, attack, endTurn,
-  doDrawPhase, playTrainer, retreat, resolvePendingTrainer,
+  doDrawPhase, playTrainer, retreat, resolvePendingTrainer, confirmRetreat,
 } from '@/engine/GameEngine';
 import { canPayCost, isBasicPokemon, isTrainer } from '@/lib/cardUtils';
 
@@ -160,6 +160,11 @@ export async function runAITurn(
       const slot = state.player2.bench.findIndex(b => b !== null && (b.card.hp ?? 0) - b.damageTaken > remaining);
       if (slot >= 0 && active.attachedEnergy.length >= active.card.retreatCost.length) {
         state = retreat(state, slot);
+        // If retreat requires energy selection, auto-pick the first N energy
+        if (state.pendingRetreat) {
+          const uids = active.attachedEnergy.slice(0, state.pendingRetreat.cost).map(e => e.uid);
+          state = confirmRetreat(state, uids);
+        }
         setState(state);
         await ack(state);
       }

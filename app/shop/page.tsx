@@ -6,19 +6,21 @@ import { useAuthStore } from '@/store/authStore';
 import { ALL_CARDS, isSetUnlocked, setCompletionPct } from '@/lib/cardUtils';
 import {
   SET_PROGRESSION, PACK_COST, PACK_BUNDLE_5, PACK_BUNDLE_10,
-  THEME_DECK_COST, pickPackCards, singleCost, VOUCHER_THRESHOLD, UNLOCK_THRESHOLD,
+  THEME_DECK_COST, generatePackCards, singleCost, VOUCHER_THRESHOLD, UNLOCK_THRESHOLD,
 } from '@/lib/progression';
 import { STARTER_DECKS } from '@/lib/starterDecks';
 import CardImage from '@/components/cards/CardImage';
 import type { CardData } from '@/engine/GameState';
 
-const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl']);
+const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl', 'Wizards Black Star Promos']);
 const SHOP_SETS = SET_PROGRESSION.filter(s => !EXCLUDED.has(s.name));
 
 export default function ShopPage() {
-  const { user, profile, addCredits, addToCollection, collection, freeVouchers, redeemVoucher, saveDeck, isLocalGuest, packVouchers, usePackVoucher } = useAuthStore();
+  const { user, profile, addCredits, addToCollection, collection, encountered, freeVouchers, redeemVoucher, saveDeck, isLocalGuest, packVouchers, usePackVoucher, unopenedPacks, addUnopenedPacks, consumeOnePack } = useAuthStore();
   const [packResult, setPackResult] = useState<CardData[]>([]);
   const [packLabel, setPackLabel] = useState('');
+  const [openingSet, setOpeningSet] = useState<string | null>(null);
+  const [previewSet, setPreviewSet] = useState<string | null>(null);
   const [tab, setTab] = useState<'packs' | 'decks' | 'singles'>('packs');
   const [singlesSearch, setSinglesSearch] = useState('');
   const [singlesSet, setSinglesSet] = useState('All');
@@ -27,24 +29,10 @@ export default function ShopPage() {
 
   async function redeemPackVoucher(setName: string) {
     if (!user) { alert('Sign in first!'); return; }
-    if (!isSetUnlocked(setName, collection)) {
-      alert('This set is not unlocked yet.');
-      return;
-    }
-    const allSetCards = ALL_CARDS.filter(c => c.set === setName);
-    const basicEnergyPool = allSetCards.filter(c => c.supertype === 'Energy' && !c.rarity);
-    const setCards = allSetCards
-      .filter(c => !basicEnergyPool.some(e => e.id === c.id))
-      .map(c => ({ id: c.id, rarity: c.rarity || 'Common' }));
-    if (setCards.length === 0) return;
-    const pickEnergy = () => basicEnergyPool[Math.floor(Math.random() * basicEnergyPool.length)].id;
-    const allIds = [...pickPackCards(setCards)];
-    if (basicEnergyPool.length > 0) allIds.push(pickEnergy(), pickEnergy());
-    const pickedCards = allIds.map(id => ALL_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
+    if (!isSetUnlocked(setName, collection)) { alert('This set is not unlocked yet.'); return; }
     usePackVoucher();
-    addToCollection(allIds);
-    setPackResult(pickedCards);
-    setPackLabel(`🎟 Pack Voucher — ${setName}`);
+    addUnopenedPacks(setName, 1);
+    alert(`1 ${setName} pack added to your inventory!`);
   }
 
   async function buyPacks(setName: string, count: number) {
@@ -57,35 +45,31 @@ export default function ShopPage() {
       alert(`Complete 75% of ${entry?.prerequisite} to unlock this set (you have ${pct}%).`);
       return;
     }
+    await addCredits(-cost);
+    addUnopenedPacks(setName, count);
+  }
 
-    const allSetCards = ALL_CARDS.filter(c => c.set === setName);
+  function openOnePack(setName: string) {
+    if (!consumeOnePack(setName)) return;
+    const ids = generatePackCards(setName);
+    const cards = ids.map(id => ALL_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
+    addToCollection(ids);
+    setPackResult(cards);
+    setPackLabel(`1 Pack — ${setName}`);
+  }
 
-    // Basic energy cards (rarity='') are a dedicated pack slot, not commons
-    const basicEnergyPool = allSetCards.filter(c => c.supertype === 'Energy' && !c.rarity);
-    const setCards = allSetCards
-      .filter(c => !basicEnergyPool.some(e => e.id === c.id))
-      .map(c => ({ id: c.id, rarity: c.rarity || 'Common' }));
-
-    if (setCards.length === 0) { alert('No cards found for this set.'); return; }
-
-    const pickEnergy = () => basicEnergyPool[Math.floor(Math.random() * basicEnergyPool.length)].id;
-
+  function openAllPacks(setName: string) {
+    const count = unopenedPacks[setName] ?? 0;
+    if (count === 0) return;
     const allIds: string[] = [];
     for (let i = 0; i < count; i++) {
-      allIds.push(...pickPackCards(setCards));
-      if (basicEnergyPool.length > 0) {
-        allIds.push(pickEnergy(), pickEnergy());
-      }
+      consumeOnePack(setName);
+      allIds.push(...generatePackCards(setName));
     }
-
-    const pickedCards = allIds
-      .map(id => ALL_CARDS.find(c => c.id === id))
-      .filter(Boolean) as CardData[];
-
-    await addCredits(-cost);
+    const cards = allIds.map(id => ALL_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
     addToCollection(allIds);
-    setPackResult(pickedCards);
-    setPackLabel(`${count === 1 ? '1 Pack' : `${count} Packs`} — ${setName}`);
+    setPackResult(cards);
+    setPackLabel(`${count} Pack${count > 1 ? 's' : ''} — ${setName}`);
   }
 
   function saveThemeDeckToBuilder(sd: typeof STARTER_DECKS[0]) {
@@ -129,6 +113,38 @@ export default function ShopPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white p-4">
+      {/* Pack preview overlay */}
+      {previewSet && (() => {
+        const setCards = ALL_CARDS.filter(c => c.set === previewSet && c.supertype !== 'Energy');
+        const seen = setCards.filter(c => encountered.has(c.id));
+        const unknownCount = setCards.length - seen.length;
+        return (
+          <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-900 rounded-2xl p-5 max-w-2xl w-full max-h-[90vh] flex flex-col">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h2 className="text-lg font-bold text-yellow-400">{previewSet} — Set Preview</h2>
+                  <p className="text-xs text-gray-400">
+                    {seen.length} discovered · {unknownCount} unknown — encounter cards in matches to reveal them
+                  </p>
+                </div>
+                <button onClick={() => setPreviewSet(null)} className="text-gray-400 hover:text-white text-2xl leading-none ml-4">×</button>
+              </div>
+              <div className="overflow-y-auto flex-1 min-h-0">
+                <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
+                  {seen.map(card => <CardImage key={card.id} card={card} small />)}
+                  {Array.from({ length: unknownCount }).map((_, i) => (
+                    <div key={i} className="aspect-[2/3] bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center">
+                      <span className="text-gray-600 text-xs">?</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Pack result overlay */}
       {packResult.length > 0 && (
         <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
@@ -193,7 +209,41 @@ export default function ShopPage() {
         </div>
 
         {tab === 'packs' && (
-          <div className="space-y-3">
+          <div className="space-y-5">
+            {/* Unopened pack inventory */}
+            {Object.keys(unopenedPacks).length > 0 && (
+              <div className="bg-blue-950 border border-blue-700 rounded-xl p-4 space-y-3">
+                <h3 className="text-sm font-bold text-blue-300">📦 Your Unopened Packs</h3>
+                <div className="space-y-2">
+                  {Object.entries(unopenedPacks).filter(([, n]) => n > 0).map(([setName, count]) => (
+                    <div key={setName} className="flex items-center justify-between bg-blue-900/50 rounded-lg px-3 py-2">
+                      <div>
+                        <span className="font-semibold text-white text-sm">{setName}</span>
+                        <span className="ml-2 text-blue-300 text-sm">× {count}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openOnePack(setName)}
+                          className="px-3 py-1 bg-yellow-500 hover:bg-yellow-400 text-black text-xs font-bold rounded-lg"
+                        >
+                          Open 1
+                        </button>
+                        {count > 1 && (
+                          <button
+                            onClick={() => openAllPacks(setName)}
+                            className="px-3 py-1 bg-yellow-600 hover:bg-yellow-500 text-black text-xs font-bold rounded-lg"
+                          >
+                            Open All ({count})
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-blue-400">Unopened packs can also be used to enter Draft and Sealed events.</p>
+              </div>
+            )}
+
             <div className="flex gap-4 text-xs text-gray-400 mb-2">
               <span>1 pack — {PACK_COST} cr</span>
               <span>5 packs — {PACK_BUNDLE_5} cr (save {PACK_COST * 5 - PACK_BUNDLE_5} cr)</span>
@@ -262,6 +312,12 @@ export default function ShopPage() {
                         🎟 Use Pack Voucher ({packVouchers} left)
                       </button>
                     )}
+                    <button
+                      onClick={() => setPreviewSet(name)}
+                      className="w-full mt-1.5 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg"
+                    >
+                      👁 Preview Set ({ALL_CARDS.filter(c => c.set === name && encountered.has(c.id)).length} / {ALL_CARDS.filter(c => c.set === name && c.supertype !== 'Energy').length} discovered)
+                    </button>
                   </div>
                 );
               })}
@@ -270,7 +326,8 @@ export default function ShopPage() {
         )}
 
         {tab === 'singles' && (() => {
-          const singlesPool = ALL_CARDS.filter(c => !EXCLUDED.has(c.set) && isSetUnlocked(c.set ?? '', collection));
+          // Only show cards the player has encountered in a match
+          const singlesPool = ALL_CARDS.filter(c => !EXCLUDED.has(c.set) && encountered.has(c.id));
           const setSingles = singlesSet === 'All' ? singlesPool : singlesPool.filter(c => c.set === singlesSet);
           const displayed = setSingles
             .filter(c => !singlesSearch || c.name.toLowerCase().includes(singlesSearch.toLowerCase()));
@@ -320,7 +377,12 @@ export default function ShopPage() {
                   );
                 })}
               </div>
-              {displayed.length === 0 && <p className="text-gray-500 text-sm text-center py-8">No cards found.</p>}
+              {singlesPool.length === 0 && (
+                <p className="text-gray-500 text-sm text-center py-8">
+                  No cards discovered yet. Play games to encounter cards — they'll appear here to buy as singles.
+                </p>
+              )}
+              {singlesPool.length > 0 && displayed.length === 0 && <p className="text-gray-500 text-sm text-center py-8">No cards found.</p>}
             </div>
           );
         })()}
@@ -330,9 +392,15 @@ export default function ShopPage() {
           const themeDecks  = STARTER_DECKS.filter(d => d.id !== 'custom-fists-and-fire');
           const hasVoucher  = freeVouchers.length > 0;
 
-          const DeckButtons = (sd: typeof STARTER_DECKS[0]) => (
+          function isDeckUnlocked(sd: typeof STARTER_DECKS[0]): boolean {
+            if (!sd.prerequisiteSet) return true;
+            const pct = setCompletionPct(sd.prerequisiteSet, collection);
+            return pct >= (sd.prerequisitePct ?? 0.75);
+          }
+
+          const DeckButtons = (sd: typeof STARTER_DECKS[0], unlocked: boolean) => (
             <div className="space-y-1.5">
-              {hasVoucher && (
+              {hasVoucher && unlocked && (
                 <button
                   onClick={() => handleRedeemVoucher(sd)}
                   className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-lg"
@@ -342,17 +410,28 @@ export default function ShopPage() {
               )}
               <button
                 onClick={() => handleBuyDeck(sd)}
-                disabled={credits < THEME_DECK_COST || !user}
+                disabled={!unlocked || credits < THEME_DECK_COST || !user}
                 className="w-full py-1.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-bold rounded-lg"
               >
-                {!user ? 'Sign in to buy' : credits < THEME_DECK_COST ? 'Not enough credits' : `Buy Deck — ${THEME_DECK_COST} cr`}
+                {!unlocked ? '🔒 Locked' : !user ? 'Sign in to buy' : credits < THEME_DECK_COST ? 'Not enough credits' : `Buy Deck — ${THEME_DECK_COST} cr`}
               </button>
             </div>
           );
 
+          // Group theme decks by prerequisiteSet for display
+          const GROUPS = [
+            { label: 'Base Set', prereqSet: null as string | null, prereqPct: 0 },
+            { label: 'Jungle Set', prereqSet: 'Base', prereqPct: 0.75 },
+            { label: 'Fossil Set', prereqSet: 'Jungle', prereqPct: 0.75 },
+            { label: 'Base Set 2', prereqSet: 'Base', prereqPct: 1.0 },
+            { label: 'Team Rocket', prereqSet: 'Fossil', prereqPct: 0.75 },
+            { label: 'Gym Heroes', prereqSet: 'Team Rocket', prereqPct: 0.75 },
+            { label: 'Gym Challenge', prereqSet: 'Gym Heroes', prereqPct: 0.75 },
+          ];
+
           return (
-            <div className="space-y-5">
-              {/* ── Starter Deck ─────────────────────────────── */}
+            <div className="space-y-6">
+              {/* ── Starter Deck (always visible) ────────────── */}
               {starterDeck && (
                 <div>
                   <h3 className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-2">Starter Deck</h3>
@@ -362,30 +441,52 @@ export default function ShopPage() {
                       <span className="text-[10px] bg-yellow-500 text-black font-bold px-1.5 py-0.5 rounded">STARTER</span>
                     </div>
                     <div className="text-sm text-gray-400 mb-3">{starterDeck.description}</div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-gray-500">{starterDeck.cardIds.filter(id => !id.startsWith('basic-')).length} collectible cards</span>
-                    </div>
-                    {DeckButtons(starterDeck)}
+                    <span className="text-xs text-gray-500">{starterDeck.cardIds.filter(id => !id.startsWith('basic-')).length} collectible cards</span>
+                    <div className="mt-2">{DeckButtons(starterDeck, true)}</div>
                   </div>
                 </div>
               )}
 
-              {/* ── Theme Decks ───────────────────────────────── */}
-              <div>
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Theme Decks</h3>
-                <p className="text-xs text-gray-500 mb-3">Each costs {THEME_DECK_COST} credits. Cards added to collection + deck saved to builder.</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {themeDecks.map(sd => (
-                    <div key={sd.id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-                      <div className="font-bold mb-0.5">{sd.name}</div>
-                      <div className="text-xs text-gray-500 mb-1">{sd.type}</div>
-                      <div className="text-sm text-gray-400 mb-3">{sd.description}</div>
-                      <div className="text-xs text-gray-500 mb-2">{sd.cardIds.filter(id => !id.startsWith('basic-')).length} collectible cards</div>
-                      {DeckButtons(sd)}
+              {/* ── Theme Deck groups ─────────────────────────── */}
+              <p className="text-xs text-gray-500">Theme decks cost {THEME_DECK_COST} credits. Cards are added to your collection and the deck is saved to the builder.</p>
+              {GROUPS.map(group => {
+                const groupDecks = themeDecks.filter(sd =>
+                  sd.prerequisiteSet === group.prereqSet &&
+                  (group.prereqSet === null || (sd.prerequisitePct ?? 0.75) === group.prereqPct)
+                );
+                if (groupDecks.length === 0) return null;
+                const prereqPct = group.prereqSet ? Math.round(setCompletionPct(group.prereqSet, collection) * 100) : 100;
+                const threshold  = Math.round(group.prereqPct * 100);
+                const groupUnlocked = group.prereqSet === null || prereqPct >= threshold;
+                return (
+                  <div key={group.label}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className={`text-xs font-bold uppercase tracking-wider ${groupUnlocked ? 'text-gray-300' : 'text-gray-600'}`}>
+                        {groupUnlocked ? '' : '🔒 '}{group.label} Decks
+                      </h3>
+                      {!groupUnlocked && group.prereqSet && (
+                        <span className="text-[10px] text-yellow-600">
+                          ({group.prereqSet}: {prereqPct}% / {threshold}% needed)
+                        </span>
+                      )}
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <div className={`grid gap-3 sm:grid-cols-2 ${!groupUnlocked ? 'opacity-50 pointer-events-none' : ''}`}>
+                      {groupDecks.map(sd => {
+                        const unlocked = isDeckUnlocked(sd);
+                        return (
+                          <div key={sd.id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                            <div className="font-bold mb-0.5">{sd.name}</div>
+                            <div className="text-xs text-gray-500 mb-1">{sd.type}</div>
+                            <div className="text-sm text-gray-400 mb-2">{sd.description}</div>
+                            <div className="text-xs text-gray-500 mb-2">{sd.cardIds.filter(id => !id.startsWith('basic-')).length} collectible cards</div>
+                            {DeckButtons(sd, unlocked)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
         })()}

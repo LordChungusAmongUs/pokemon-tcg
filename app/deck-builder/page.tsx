@@ -10,6 +10,30 @@ import { useAuthStore } from '@/store/authStore';
 import { isSetUnlocked } from '@/lib/cardUtils';
 import { STARTER_DECKS } from '@/lib/starterDecks';
 import { FORMATS } from '@/lib/formats';
+import { pokedexNumber, SET_RELEASE_ORDER } from '@/lib/pokedex';
+
+const TYPE_ORDER: string[] = ['Grass', 'Fire', 'Water', 'Lightning', 'Psychic', 'Fighting', 'Colorless', 'Darkness', 'Metal', 'Dragon', 'Fairy'];
+
+function japaneseSort(cards: CardData[]): CardData[] {
+  return [...cards].sort((a, b) => {
+    const supertypeOrder = (s: string) => s === 'Pokémon' ? 0 : s === 'Trainer' ? 1 : 2;
+    if (supertypeOrder(a.supertype) !== supertypeOrder(b.supertype))
+      return supertypeOrder(a.supertype) - supertypeOrder(b.supertype);
+    if (a.supertype === 'Pokémon') {
+      const aTypeIdx = TYPE_ORDER.indexOf(a.types?.[0] ?? 'Colorless');
+      const bTypeIdx = TYPE_ORDER.indexOf(b.types?.[0] ?? 'Colorless');
+      if (aTypeIdx !== bTypeIdx) return (aTypeIdx === -1 ? 99 : aTypeIdx) - (bTypeIdx === -1 ? 99 : bTypeIdx);
+      const aDex = pokedexNumber(a.name);
+      const bDex = pokedexNumber(b.name);
+      if (aDex !== bDex) return aDex - bDex;
+      const aSet = SET_RELEASE_ORDER[a.set] ?? 99;
+      const bSet = SET_RELEASE_ORDER[b.set] ?? 99;
+      if (aSet !== bSet) return aSet - bSet;
+      return (parseInt(a.number ?? '9999', 10) || 9999) - (parseInt(b.number ?? '9999', 10) || 9999);
+    }
+    return a.name.localeCompare(b.name);
+  });
+}
 
 // Excluded sets (Base Set 2, Diamond & Pearl and beyond)
 const EXCLUDED_SETS = new Set(['Base Set 2', 'Diamond & Pearl']);
@@ -42,6 +66,8 @@ export default function DeckBuilderPage() {
   const [format, setFormat] = useState('');
   const [set, setSet] = useState('All');
   const [detail, setDetail] = useState<CardData | null>(null);
+  const [sortMode, setSortMode] = useState<'default' | 'japanese'>('default');
+  const [previewCard, setPreviewCard] = useState<CardData | null>(null);
   const [deck, setDeck] = useState<CardData[]>([]);
   const [deckName, setDeckName] = useState('My Deck');
   const [editingDeckId, setEditingDeckId] = useState<string | undefined>();
@@ -67,28 +93,31 @@ export default function DeckBuilderPage() {
   }
 
   const filtered = useMemo(() => {
-    return BROWSE_CARDS.filter(c => {
+    const base = BROWSE_CARDS.filter(c => {
       const isBasicEnergy = c.supertype === 'Energy' && c.subtype === 'Basic';
-      // Must own at least one copy (basic energy always passes)
       if (!isBasicEnergy && (collection[c.id] ?? 0) === 0) return false;
-      // Locked sets still blocked
       if (!isBasicEnergy && c.set && !isSetUnlocked(c.set, collection)) return false;
-      // Format/set/search filters
       if (formatSetNames && c.set && !formatSetNames.has(c.set) && !isBasicEnergy) return false;
       if (!formatSetNames && set !== 'All' && c.set !== set) return false;
       if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [search, set, format, collection]);
+    return sortMode === 'japanese' ? japaneseSort(base) : base;
+  }, [search, set, format, collection, sortMode]);
 
   function countInDeck(cardId: string) {
     return deck.filter(c => c.id === cardId).length;
   }
 
+  // 4-per-name rule: count ALL copies of a card name across every set
+  function countNameInDeck(cardName: string) {
+    return deck.filter(c => c.name === cardName).length;
+  }
+
   function addCard(card: CardData) {
     if (deck.length >= 60) return;
     const isBasicEnergy = card.supertype === 'Energy' && card.subtype === 'Basic';
-    if (!isBasicEnergy && countInDeck(card.id) >= 4) return;
+    if (!isBasicEnergy && countNameInDeck(card.name) >= 4) return; // max 4 of any name across all sets
     if (!isBasicEnergy && countInDeck(card.id) >= owned(card)) return; // can't add more than you own
     if (card.set && !isSetUnlocked(card.set, collection) && !isBasicEnergy) return;
     setDeck([...deck, card]);
@@ -156,6 +185,48 @@ export default function DeckBuilderPage() {
     <div className="min-h-screen bg-gray-950 text-white flex flex-col md:flex-row">
       {detail && <CardDetail card={detail} onClose={() => setDetail(null)} />}
 
+      {/* Card preview modal */}
+      {previewCard && (() => {
+        const isBasicEnergy = previewCard.supertype === 'Energy' && previewCard.subtype === 'Basic';
+        const inDeckCount = countInDeck(previewCard.id);
+        const nameInDeckCount = countNameInDeck(previewCard.name);
+        const ownedQty = owned(previewCard);
+        const canAdd = deck.length < 60 && (isBasicEnergy || (nameInDeckCount < 4 && inDeckCount < ownedQty));
+        const canRemove = inDeckCount > 0;
+        return (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setPreviewCard(null)}>
+            <div className="bg-gray-900 rounded-2xl p-4 flex flex-col items-center gap-3 max-w-xs w-full" onClick={e => e.stopPropagation()}>
+              <CardImage card={previewCard} />
+              <p className="font-bold text-center">{previewCard.name}</p>
+              <p className="text-xs text-gray-400 text-center">{previewCard.set} · {previewCard.rarity}</p>
+              {!isBasicEnergy && <p className="text-xs text-gray-400">Owned: {ownedQty} · In deck: {inDeckCount}</p>}
+              <div className="flex gap-2 w-full">
+                <button
+                  disabled={!canAdd}
+                  onClick={() => addCard(previewCard)}
+                  className="flex-1 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg"
+                >
+                  + Add to Deck
+                </button>
+                <button
+                  disabled={!canRemove}
+                  onClick={() => removeCard(previewCard)}
+                  className="flex-1 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg"
+                >
+                  − Remove
+                </button>
+              </div>
+              <button
+                onClick={() => setPreviewCard(null)}
+                className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Left: card browser */}
       <div className="flex-1 flex flex-col">
         <div className="sticky top-0 bg-gray-900 border-b border-gray-800 z-10 p-3 space-y-2">
@@ -165,6 +236,12 @@ export default function DeckBuilderPage() {
               {profile && (
                 <span className="text-xs text-yellow-400">Lv{playerLevel}</span>
               )}
+              <button
+                onClick={() => setSortMode(m => m === 'japanese' ? 'default' : 'japanese')}
+                className={`text-xs px-2 py-1 rounded ${sortMode === 'japanese' ? 'bg-red-700 text-white' : 'bg-gray-700 text-gray-300'}`}
+              >
+                JP Order
+              </button>
               <Link href="/" className="text-sm text-gray-400 hover:text-white">← Home</Link>
             </div>
           </div>
@@ -216,33 +293,29 @@ export default function DeckBuilderPage() {
             const inDeck = countInDeck(card.id);
             const isBasicEnergy = card.supertype === 'Energy' && card.subtype === 'Basic';
             const ownedQty = owned(card);
-            const maxed = inDeck >= Math.min(4, ownedQty) || deck.length >= 60;
+            const nameInDeck = countNameInDeck(card.name);
+            const maxed = (!isBasicEnergy && (nameInDeck >= 4 || inDeck >= ownedQty)) || deck.length >= 60;
             return (
               <div key={card.id} className="flex flex-col items-center gap-1">
                 <div className="relative">
                   <CardImage
                     card={card}
-                    onClick={() => addCard(card)}
+                    onClick={() => setPreviewCard(card)}
                     dimmed={maxed}
                     small
                   />
-                  {/* In-deck count */}
                   {inDeck > 0 && (
                     <span className="absolute top-1 right-1 bg-yellow-500 text-black text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                       {inDeck}
                     </span>
                   )}
-                  {/* Owned quantity (bottom-left) */}
                   {!isBasicEnergy && (
                     <span className="absolute bottom-1 left-1 text-[9px] font-bold text-white bg-black/70 rounded px-0.5">
                       ×{ownedQty}
                     </span>
                   )}
                 </div>
-                <span
-                  className="text-[9px] text-gray-400 text-center w-full truncate cursor-pointer hover:text-white"
-                  onContextMenu={e => { e.preventDefault(); setDetail(card); }}
-                >
+                <span className="text-[9px] text-gray-400 text-center w-full truncate cursor-pointer hover:text-white">
                   {card.name}
                 </span>
               </div>

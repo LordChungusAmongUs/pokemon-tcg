@@ -56,7 +56,7 @@ export default function PrereleasePage() {
     );
   }
 
-  if (prereleaseInvites.length === 0) {
+  if (prereleaseInvites.length === 0 && phase === 'list') {
     return (
       <div className="min-h-screen bg-gray-950 text-white p-4">
         <div className="max-w-md mx-auto pt-12 text-center space-y-4">

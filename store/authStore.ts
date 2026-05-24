@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import type { Profile, Deck } from '@/types/database';
 import { computeLevel, CREDIT_REWARDS, STARTING_CREDITS, VOUCHER_THRESHOLD, SET_PROGRESSION, getLevelUpReward, type LevelReward } from '@/lib/progression';
+import { generatePackCards } from '@/lib/progression';
 import { setCompletionPct, ALL_CARDS, isSetUnlocked } from '@/lib/cardUtils';
 import { STARTER_DECKS } from '@/lib/starterDecks';
 
@@ -76,6 +77,22 @@ function markStarterGiven(userId: string) {
   try { localStorage.setItem(starterGivenKey(userId), 'true'); } catch {}
 }
 
+function unopenedPacksKey(userId: string) { return `pokemon-tcg-unopened-${userId}`; }
+function loadUnopenedPacks(userId: string): Record<string, number> {
+  try { const r = localStorage.getItem(unopenedPacksKey(userId)); return r ? JSON.parse(r) : {}; } catch { return {}; }
+}
+function saveUnopenedPacks(userId: string, p: Record<string, number>) {
+  try { localStorage.setItem(unopenedPacksKey(userId), JSON.stringify(p)); } catch {}
+}
+
+function onboardingKey(userId: string) { return `pokemon-tcg-onboarding-${userId}`; }
+function loadOnboarding(userId: string): { step: number | null; promoCardId: string | null } {
+  try { const r = localStorage.getItem(onboardingKey(userId)); return r ? JSON.parse(r) : { step: null, promoCardId: null }; } catch { return { step: null, promoCardId: null }; }
+}
+function saveOnboarding(userId: string, data: { step: number | null; promoCardId: string | null }) {
+  try { localStorage.setItem(onboardingKey(userId), JSON.stringify(data)); } catch {}
+}
+
 function isSupabaseConfigured(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
   return url.length > 0 && !url.includes('placeholder');
@@ -127,6 +144,9 @@ interface AuthStore {
   prereleaseInvites: string[];        // set names with unused prerelease invites
   packVouchers: number;               // free booster pack vouchers from level-ups
   pendingLevelUp: { level: number; reward: LevelReward; cardId?: string } | null;
+  unopenedPacks: Record<string, number>;
+  onboardingStep: number | null;
+  onboardingPromoCardId: string | null;
   init: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInAsGuest: () => Promise<void>;
@@ -147,6 +167,9 @@ interface AuthStore {
   usePrereleaseInvite: (setName: string) => void;
   dismissLevelUp: () => void;
   usePackVoucher: () => void;
+  addUnopenedPacks: (setName: string, count: number) => void;
+  consumeOnePack: (setName: string) => boolean;
+  advanceOnboarding: (addPromoToCollection?: boolean) => void;
   resetAccount: () => Promise<void>;
 }
 
@@ -162,6 +185,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   prereleaseInvites: [],
   packVouchers: 0,
   pendingLevelUp: null,
+  unopenedPacks: {},
+  onboardingStep: null,
+  onboardingPromoCardId: null,
 
   init: async () => {
     // Restore local guest session first (works without any Supabase setup)
@@ -173,11 +199,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       if (isEmpty) saveLocalGuest(profile);
       const collection = loadCollectionFromStorage(LOCAL_GUEST_ID);
       const encountered = loadEncounteredFromStorage(LOCAL_GUEST_ID);
+      const guestOnb = loadOnboarding(LOCAL_GUEST_ID);
       set({
         user: fakeUser(), profile, isLocalGuest: true, loading: false, collection, encountered,
         freeVouchers: loadVouchers(LOCAL_GUEST_ID),
         prereleaseInvites: loadPrereleaseInvites(LOCAL_GUEST_ID),
         packVouchers: loadPackVouchers(LOCAL_GUEST_ID),
+        unopenedPacks: loadUnopenedPacks(LOCAL_GUEST_ID),
+        onboardingStep: guestOnb.step,
+        onboardingPromoCardId: guestOnb.promoCardId,
       });
       get().ensureStarterDeck();
       get().claimDailyCredits();
@@ -210,12 +240,16 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         if (u) {
           await get().refreshProfile();
           await get().refreshDecks();
+          const authOnb = loadOnboarding(u.id);
           set({
             collection: loadCollectionFromStorage(u.id),
             encountered: loadEncounteredFromStorage(u.id),
             freeVouchers: loadVouchers(u.id),
             prereleaseInvites: loadPrereleaseInvites(u.id),
             packVouchers: loadPackVouchers(u.id),
+            unopenedPacks: loadUnopenedPacks(u.id),
+            onboardingStep: authOnb.step,
+            onboardingPromoCardId: authOnb.promoCardId,
           });
           get().ensureStarterDeck();
           get().claimDailyCredits();
@@ -259,7 +293,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         // If credits still 0 (e.g. schema migration not run), force-patch
         const { profile } = get();
         if (profile && (profile.credits ?? 0) === 0) {
-          await supabase.from('profiles').update({ credits: 1000 }).eq('id', data.user.id);
+          await supabase.from('profiles').update({ credits: STARTING_CREDITS }).eq('id', data.user.id);
           await get().refreshProfile();
         }
         set({
@@ -391,7 +425,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           cardId = pick.id;
         }
       } else if (reward.type === 'promo') {
-        const pool = ALL_CARDS.filter(c => c.set === 'Wizards Black Star Promos');
+        // Random promos drawn from #1-18 and #20-28 only
+        const PROMO_RANGE = new Set([
+          ...Array.from({ length: 18 }, (_, i) => `basep-${i + 1}`),
+          ...Array.from({ length: 9 }, (_, i) => `basep-${i + 20}`),
+        ]);
+        const pool = ALL_CARDS.filter(c => c.set === 'Wizards Black Star Promos' && PROMO_RANGE.has(c.id));
         if (pool.length > 0) {
           const pick = pool[Math.floor(Math.random() * pool.length)];
           get().addToCollection([pick.id]);
@@ -516,6 +555,41 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   dismissLevelUp: () => set({ pendingLevelUp: null }),
 
+  addUnopenedPacks: (setName: string, count: number) => {
+    const { user, isLocalGuest, unopenedPacks } = get();
+    if (!user) return;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    const updated = { ...unopenedPacks, [setName]: (unopenedPacks[setName] ?? 0) + count };
+    saveUnopenedPacks(storageId, updated);
+    set({ unopenedPacks: updated });
+  },
+
+  consumeOnePack: (setName: string) => {
+    const { user, isLocalGuest, unopenedPacks } = get();
+    if (!user) return false;
+    const current = unopenedPacks[setName] ?? 0;
+    if (current <= 0) return false;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    const updated = { ...unopenedPacks, [setName]: current - 1 };
+    if (updated[setName] === 0) delete updated[setName];
+    saveUnopenedPacks(storageId, updated);
+    set({ unopenedPacks: updated });
+    return true;
+  },
+
+  advanceOnboarding: (addPromoToCollection = false) => {
+    const { user, isLocalGuest, onboardingStep, onboardingPromoCardId } = get();
+    if (!user) return;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    if (addPromoToCollection && onboardingPromoCardId) {
+      get().addToCollection([onboardingPromoCardId]);
+    }
+    const nextStep = !onboardingStep || onboardingStep >= 4 ? null : onboardingStep + 1;
+    const onb = { step: nextStep, promoCardId: nextStep ? onboardingPromoCardId : null };
+    saveOnboarding(storageId, onb);
+    set({ onboardingStep: nextStep, ...(nextStep === null ? { onboardingPromoCardId: null } : {}) });
+  },
+
   usePackVoucher: () => {
     const { user, isLocalGuest, packVouchers } = get();
     if (!user || packVouchers <= 0) return;
@@ -561,48 +635,38 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       } catch {}
     }
 
-    // Fists & Fire — give cards to collection
+    // Fists & Fire — give cards to collection + save deck
     const fistsFire = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
     if (fistsFire) {
       get().addToCollection(fistsFire.cardIds.filter(id => !id.startsWith('basic-')));
       saveDeckLocally(fistsFire.name, fistsFire.cardIds);
     }
 
-    // Machamp Deck — give cards + save to builder
-    const machamp = STARTER_DECKS.find(d => d.id === 'starter-machamp');
-    if (machamp) {
-      get().addToCollection(machamp.cardIds.filter(id => !id.startsWith('basic-')));
-      if (!isLocalGuest) {
-        get().saveDeck(machamp.name, machamp.cardIds);
-      } else {
-        saveDeckLocally(machamp.name, machamp.cardIds);
-      }
+    // Machamp Theme Deck — give cards to collection + save deck
+    const machampDeck = STARTER_DECKS.find(d => d.id === 'starter-machamp');
+    if (machampDeck) {
+      get().addToCollection(machampDeck.cardIds.filter(id => !id.startsWith('basic-')));
+      saveDeckLocally(machampDeck.name, machampDeck.cardIds);
     }
 
-    // 3 pack vouchers
-    const newPV = get().packVouchers + 3;
-    savePackVouchers(storageId, newPV);
-    set({ packVouchers: newPV });
+    // 3 unopened Base Set packs (shown in onboarding step 2)
+    const newUP = { ...get().unopenedPacks, 'Base': (get().unopenedPacks['Base'] ?? 0) + 3 };
+    saveUnopenedPacks(storageId, newUP);
+    set({ unopenedPacks: newUP });
 
-    // 1 theme deck voucher
+    // 1 theme deck voucher (shown in onboarding step 4)
     const newVouchers = [...get().freeVouchers, 'any'];
     saveVouchers(storageId, newVouchers);
     set({ freeVouchers: newVouchers });
 
-    // 1 random Base Set rare card
-    const rarePool = ALL_CARDS.filter(c => c.rarity?.toLowerCase() === 'rare' && c.set === 'Base');
-    if (rarePool.length > 0)
-      get().addToCollection([rarePool[Math.floor(Math.random() * rarePool.length)].id]);
+    // Starting promo is always Wizards Black Star Promo #1 — Pikachu
+    // NOT added to collection yet; deferred to onboarding step 3
+    const promoCard = ALL_CARDS.find(c => c.id === 'basep-1') ?? null;
 
-    // 1 random Base Set holo card
-    const holoPool = ALL_CARDS.filter(c => c.rarity?.toLowerCase().includes('holo') && c.set === 'Base');
-    if (holoPool.length > 0)
-      get().addToCollection([holoPool[Math.floor(Math.random() * holoPool.length)].id]);
-
-    // 1 random Wizards Black Star Promo
-    const promoPool = ALL_CARDS.filter(c => c.set === 'Wizards Black Star Promos');
-    if (promoPool.length > 0)
-      get().addToCollection([promoPool[Math.floor(Math.random() * promoPool.length)].id]);
+    // Trigger onboarding modal sequence
+    const onb = { step: 1, promoCardId: promoCard?.id ?? null };
+    saveOnboarding(storageId, onb);
+    set({ onboardingStep: 1, onboardingPromoCardId: promoCard?.id ?? null });
 
     markStarterGiven(storageId);
   },
@@ -617,13 +681,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     saveVouchers(storageId, []);
     savePackVouchers(storageId, 0);
     savePrereleaseInvites(storageId, []);
+    saveUnopenedPacks(storageId, {});
+    saveOnboarding(storageId, { step: null, promoCardId: null });
     try { localStorage.removeItem(starterGivenKey(storageId)); } catch {}
     try { localStorage.removeItem(`pokemon-tcg-milestones-${storageId}`); } catch {}
 
     if (isLocalGuest) {
       const reset: Profile = { ...makeGuestProfile(), display_name: profile?.display_name ?? 'Trainer' };
       saveLocalGuest(reset);
-      set({ profile: reset, collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [] });
+      set({ profile: reset, collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [], unopenedPacks: {}, onboardingStep: null, onboardingPromoCardId: null });
       get().ensureStarterDeck();
       return;
     }
@@ -632,7 +698,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     await supabase.from('profiles').update({
       xp: 0, level: 1, credits: STARTING_CREDITS, wins: 0, losses: 0, elo: 1000,
     }).eq('id', user.id);
-    set({ collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [] });
+    set({ collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [], unopenedPacks: {}, onboardingStep: null, onboardingPromoCardId: null });
     await get().refreshProfile();
     get().ensureStarterDeck();
   },

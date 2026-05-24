@@ -4,7 +4,7 @@ import type {
 } from './GameState';
 import { calculateDamage, applyPoisonDamage, applyBurnDamage, isKnockedOut } from './damage';
 import { checkWinConditions, checkDeckOut } from './winConditions';
-import { makeUID, makeCardInstance, canPayCost, isPokemon, isBasicPokemon } from '@/lib/cardUtils';
+import { makeUID, makeCardInstance, canPayCost, isPokemon, isBasicPokemon, ALL_CARDS } from '@/lib/cardUtils';
 import { computeAttackEffects, handleTrainerEffect, flip } from './cardEffects';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -47,6 +47,8 @@ export function inPlayPokemon(card: CardData, turn: number): InPlayPokemon {
     turnPlayed: turn,
     isFirstTurn: false,
     evolvedFrom: [],
+    energyBurned: false,
+    swordsDanceActive: false,
   };
 }
 
@@ -74,6 +76,59 @@ function fakeEnergyCard(type: EnergyType, cardId: string): CardInstance {
     weaknesses: [], resistances: [], retreatCost: [], rules: [],
     localImagePath: null, apiImageUrl: null,
   });
+}
+
+// ─── Pokémon Power helpers ───────────────────────────────────────────────────
+
+function hasAbility(pokemon: InPlayPokemon, name: string): boolean {
+  return pokemon.card.abilities.some(a => a.name === name);
+}
+
+function isMukSuppressing(state: GameState): boolean {
+  const anyMuk = (p: typeof state.player1) =>
+    (p.active !== null && hasAbility(p.active, 'Toxic Gas') && p.active.statusCondition === null) ||
+    p.bench.some(b => b !== null && hasAbility(b, 'Toxic Gas') && b.statusCondition === null);
+  return anyMuk(state.player1) || anyMuk(state.player2);
+}
+
+// Passive "whenever" power — not blocked by own status conditions
+function isPassivePowerOn(pokemon: InPlayPokemon, name: string, state: GameState): boolean {
+  if (!hasAbility(pokemon, name)) return false;
+  if (name !== 'Toxic Gas' && isMukSuppressing(state)) return false;
+  return true;
+}
+
+// Active "during your turn" power — blocked by Asleep/Confused/Paralyzed
+export function isActivePowerOn(pokemon: InPlayPokemon, name: string, state: GameState): boolean {
+  if (!isPassivePowerOn(pokemon, name, state)) return false;
+  const sc = pokemon.statusCondition;
+  return sc !== 'Asleep' && sc !== 'Confused' && sc !== 'Paralyzed';
+}
+
+function powerUsed(state: GameState, uid: string, name: string): boolean {
+  return state.usedPowersThisTurn.includes(`${uid}:${name}`);
+}
+
+function markPowerUsed(state: GameState, uid: string, name: string): GameState {
+  return { ...state, usedPowersThisTurn: [...state.usedPowersThisTurn, `${uid}:${name}`] };
+}
+
+function findInPlay(state: GameState, uid: string): { side: 'player1' | 'player2'; slot: 'active' | number } | null {
+  for (const side of ['player1', 'player2'] as const) {
+    const p = state[side];
+    if (p.active?.uid === uid) return { side, slot: 'active' };
+    for (let i = 0; i < 5; i++) if (p.bench[i]?.uid === uid) return { side, slot: i };
+  }
+  return null;
+}
+
+function setPokemonInPlay(state: GameState, uid: string, updated: InPlayPokemon): GameState {
+  const loc = findInPlay(state, uid);
+  if (!loc) return state;
+  const p = state[loc.side];
+  if (loc.slot === 'active') return { ...state, [loc.side]: { ...p, active: updated } };
+  const nb = [...p.bench]; nb[loc.slot as number] = updated;
+  return { ...state, [loc.side]: { ...p, bench: nb } };
 }
 
 // ─── init ────────────────────────────────────────────────────────────────────
@@ -167,6 +222,7 @@ export function initGame(
     log: logs,
     pendingCoinFlip: false,
     mode,
+    usedPowersThisTurn: [],
   };
 }
 
@@ -277,12 +333,22 @@ export function attachEnergy(
 ): GameState {
   const active = state.activePlayer;
   const player = state[active];
-  if (player.energyPlayedThisTurn) return state;
 
   const energyCard = player.hand.find(c => c.uid === energyHandUid);
   if (!energyCard || energyCard.card.supertype !== 'Energy') return state;
 
   const energyType: EnergyType = parseEnergyType(energyCard.card);
+
+  // Rain Dance: water energy attached to a water Pokémon bypasses the per-turn limit
+  const isWaterEnergy = energyType === 'Water';
+  const hasRainDance = isWaterEnergy && [player.active, ...player.bench].some(
+    p => p !== null && isActivePowerOn(p, 'Rain Dance', state),
+  );
+  const allOwn = [player.active, ...player.bench].filter(Boolean) as InPlayPokemon[];
+  const targetPoke = allOwn.find(p => p.uid === targetUid);
+  const isRainDanceAttach = hasRainDance && (targetPoke?.card.types.includes('Water') ?? false);
+
+  if (player.energyPlayedThisTurn && !isRainDanceAttach) return state;
 
   // Double Colorless Energy (base1-96) provides 2 Colorless energy instances
   const isDCE = energyCard.card.id === 'base1-96' ||
@@ -314,10 +380,11 @@ export function attachEnergy(
     hand: newHand,
     active: newActive,
     bench: newBench,
-    energyPlayedThisTurn: true,
+    energyPlayedThisTurn: isRainDanceAttach ? player.energyPlayedThisTurn : true,
   };
   const energyLabel = isDCE ? 'Double Colorless Energy (2×Colorless)' : `${energyType} Energy`;
-  return log({ ...state, [active]: updated }, `${player.name} attaches ${energyLabel} to ${targetName}.`);
+  const rainMsg = isRainDanceAttach ? ' 💧 (Rain Dance)' : '';
+  return log({ ...state, [active]: updated }, `${player.name} attaches ${energyLabel}${rainMsg} to ${targetName}.`);
 }
 
 // ─── retreat ─────────────────────────────────────────────────────────────────
@@ -326,17 +393,46 @@ export function retreat(state: GameState, benchSlot: number): GameState {
   const active = state.activePlayer;
   const player = state[active];
   if (player.retreatedThisTurn) return state;
+  if (player.hasAttackedThisTurn) return state;
   if (!player.active) return state;
 
-  const cost = player.active.card.retreatCost.length;
+  const dodrioReduction = player.bench.filter(b => b !== null && isActivePowerOn(b, 'Retreat Aid', state)).length;
+  const cost = Math.max(0, player.active.card.retreatCost.length - dodrioReduction);
   const totalEnergy = player.active.attachedEnergy.length;
   if (totalEnergy < cost) return state;
 
   const swapTo = player.bench[benchSlot];
   if (!swapTo) return state;
 
-  const energyToDiscard = player.active.attachedEnergy.slice(-cost);
-  const remainingEnergy = player.active.attachedEnergy.slice(0, totalEnergy - cost);
+  // If cost is 0, execute immediately; otherwise wait for player to choose energy
+  if (cost === 0) {
+    return applyRetreat(state, benchSlot, []);
+  }
+  return { ...state, pendingRetreat: { benchSlot, cost } };
+}
+
+export function confirmRetreat(state: GameState, energyUids: string[]): GameState {
+  if (!state.pendingRetreat) return state;
+  const { benchSlot, cost } = state.pendingRetreat;
+  const player = state[state.activePlayer];
+  if (!player.active) return state;
+  const selected = player.active.attachedEnergy.filter(e => energyUids.includes(e.uid));
+  if (selected.length !== cost) return state;
+  return applyRetreat({ ...state, pendingRetreat: undefined }, benchSlot, energyUids);
+}
+
+function applyRetreat(state: GameState, benchSlot: number, energyUids: string[]): GameState {
+  const active = state.activePlayer;
+  const player = state[active];
+  if (!player.active) return state;
+
+  const swapTo = player.bench[benchSlot];
+  if (!swapTo) return state;
+
+  const energyToDiscard = energyUids.length > 0
+    ? player.active.attachedEnergy.filter(e => energyUids.includes(e.uid))
+    : [];
+  const remainingEnergy = player.active.attachedEnergy.filter(e => !energyUids.includes(e.uid));
   const retreatedPokemon = { ...player.active, attachedEnergy: remainingEnergy };
 
   const newBench = [...player.bench];
@@ -420,7 +516,16 @@ export function attack(state: GameState, attackIndex: number): GameState {
 
   const atk = attacker.active.card.attacks[attackIndex];
   if (!atk) return state;
-  if (!canPayCost(atk.cost, attacker.active.attachedEnergy)) return state;
+  // Energy Burn: all attached energy counts as Fire for cost-checking purposes
+  const effectiveEnergy = attacker.active.energyBurned
+    ? attacker.active.attachedEnergy.map(e => ({ ...e, type: 'Fire' as EnergyType }))
+    : attacker.active.attachedEnergy;
+  if (!canPayCost(atk.cost, effectiveEnergy)) return state;
+
+  // ── Asleep check ─────────────────────────────────────────────────────────
+  if (attacker.active.statusCondition === 'Asleep') {
+    return log(state, `${attacker.active.card.name} is Asleep and can't attack!`);
+  }
 
   // ── Paralysis check ──────────────────────────────────────────────────────
   if (attacker.active.statusCondition === 'Paralyzed') {
@@ -445,18 +550,54 @@ export function attack(state: GameState, attackIndex: number): GameState {
     }
   }
 
+  // ── Leer / "can't attack" check ─────────────────────────────────────────
+  if (state.cantAttackTarget) {
+    const { attackerUid, targetUid } = state.cantAttackTarget;
+    // Effect still applies only if same Pokémon are still active on both sides
+    if (attacker.active.uid === attackerUid && defender.active.uid === targetUid) {
+      return log(
+        { ...state, [active]: { ...attacker, hasAttackedThisTurn: true } },
+        `${attacker.active.card.name} can't attack ${defender.active.card.name} this turn! (Leer)`,
+      );
+    }
+    // One of them was swapped out — clear the restriction silently
+    state = { ...state, cantAttackTarget: undefined };
+  }
+
   // ── Compute all attack effects ───────────────────────────────────────────
   const attackerBenchCount = attacker.bench.filter(b => b !== null).length;
   const fx = computeAttackEffects(atk, attacker.active, defender.active, attackerBenchCount);
 
   // ── Calculate damage ─────────────────────────────────────────────────────
-  const rawDamage = fx.rawDamage;
+  // Swords Dance boost: Slash does 60 instead of 30 the turn after Swords Dance
+  const swordsDanceBoosted = atk.name === 'Slash' && attacker.active.swordsDanceActive;
+  const rawDamage = swordsDanceBoosted ? 60 : fx.rawDamage;
   let damage = calculateDamage(attacker.active.card.types, atk, defender.active, rawDamage);
   // PlusPower bonus (added after W/R)
   damage += attacker.attackDamageBonus;
   // Flat bonus from card effects (also after W/R conceptually — bench count, energy count)
   damage += fx.bonusDamage;
   damage = Math.max(0, damage);
+
+  // ── Passive damage-prevention Pokémon Powers ─────────────────────────────
+  const preventionMsgs: string[] = [];
+
+  // Mr. Mime Invisible Wall: prevent all damage if ≥ 30 (after W/R)
+  if (damage >= 30 && isPassivePowerOn(defender.active, 'Invisible Wall', state)) {
+    preventionMsgs.push(`🛡 ${defender.active.card.name}'s Invisible Wall prevents all damage!`);
+    damage = 0;
+  }
+  // Haunter Transparency: flip coin — heads = no damage
+  if (damage > 0 && isPassivePowerOn(defender.active, 'Transparency', state)) {
+    if (flip()) {
+      preventionMsgs.push(`👻 ${defender.active.card.name}'s Transparency! (heads — damage prevented)`);
+      damage = 0;
+    }
+  }
+  // Snorlax Thick Skinned / Venomoth Shield Dust: block status + other effects on defender
+  const blockDefStatus = isPassivePowerOn(defender.active, 'Thick Skinned', state)
+    || isPassivePowerOn(defender.active, 'Shield Dust', state);
+  const blockDefEffects = isPassivePowerOn(defender.active, 'Shield Dust', state);
 
   // ── Build log message ────────────────────────────────────────────────────
   let msg = `${attacker.active.card.name} uses ${atk.name}`;
@@ -468,32 +609,43 @@ export function attack(state: GameState, attackIndex: number): GameState {
   let newDefenderActive = { ...defender.active, damageTaken: defender.active.damageTaken + damage };
 
   // ── Status condition on defender ─────────────────────────────────────────
-  if (fx.defenderStatus !== false) {
-    // cardEffects gave us a resolved status (accounts for coin flips)
-    if (fx.defenderStatus !== null) {
-      newDefenderActive = { ...newDefenderActive, statusCondition: fx.defenderStatus };
-    }
-  } else {
-    // Fall back to text parsing (for cases not handled by computeAttackEffects)
-    const text = atk.text?.toLowerCase() ?? '';
-    if (!text.includes('flip a coin')) {
-      if (text.includes('asleep')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Asleep' };
-      else if (text.includes('paralyz')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Paralyzed' };
-      else if (text.includes('poison')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Poisoned' };
-      else if (text.includes('confus') && !text.includes(attacker.active.card.name.toLowerCase())) {
-        newDefenderActive = { ...newDefenderActive, statusCondition: 'Confused' };
-      } else if (text.includes('burn')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Burned' };
+  if (!blockDefStatus) {
+    if (fx.defenderStatus !== false) {
+      if (fx.defenderStatus !== null) {
+        newDefenderActive = { ...newDefenderActive, statusCondition: fx.defenderStatus };
+      }
+    } else {
+      const text = atk.text?.toLowerCase() ?? '';
+      if (!text.includes('flip a coin')) {
+        if (text.includes('asleep')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Asleep' };
+        else if (text.includes('paralyz')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Paralyzed' };
+        else if (text.includes('poison')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Poisoned' };
+        else if (text.includes('confus') && !text.includes(attacker.active.card.name.toLowerCase())) {
+          newDefenderActive = { ...newDefenderActive, statusCondition: 'Confused' };
+        } else if (text.includes('burn')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Burned' };
+      }
     }
   }
 
-  let next: GameState = log(
-    {
-      ...state,
-      [active]: { ...attacker, hasAttackedThisTurn: true, attackDamageBonus: 0 },
-      [opponent]: { ...defender, active: newDefenderActive },
-    },
-    msg,
-  );
+  // Swords Dance: set flag for next turn; all other attacks clear it
+  const isSwordsDance = atk.name === 'Swords Dance';
+  const updatedAttackerActive = attacker.active
+    ? { ...attacker.active, swordsDanceActive: isSwordsDance }
+    : attacker.active;
+
+  let next: GameState = {
+    ...state,
+    [active]: { ...attacker, active: updatedAttackerActive, hasAttackedThisTurn: true, attackDamageBonus: 0 },
+    [opponent]: { ...defender, active: newDefenderActive },
+    log: [...state.log, msg, ...preventionMsgs],
+  };
+
+  if (isSwordsDance) {
+    next = log(next, `${attacker.active.card.name}'s next Slash will deal 60 damage!`);
+  }
+  if (swordsDanceBoosted) {
+    next = log(next, `⚔️ Swords Dance boost! Slash deals 60 damage!`);
+  }
 
   // ── Self-confusion (Vileplume Petal Dance) ───────────────────────────────
   if (fx.selfStatus) {
@@ -510,6 +662,19 @@ export function attack(state: GameState, attackIndex: number): GameState {
     if (p.active) {
       next = log({ ...next, [active]: { ...p, active: { ...p.active, damageTaken: p.active.damageTaken + fx.recoil } } },
         `${p.active.card.name} takes ${fx.recoil} recoil damage!`);
+    }
+  }
+
+  // ── Self-heal (Leech Seed) ───────────────────────────────────────────────
+  // Only heals if damage was actually dealt (not fully prevented)
+  if (fx.selfHeal > 0 && damage > 0) {
+    const p = next[active];
+    if (p.active && p.active.damageTaken > 0) {
+      const healed = Math.min(p.active.damageTaken, fx.selfHeal);
+      next = log(
+        { ...next, [active]: { ...p, active: { ...p.active, damageTaken: p.active.damageTaken - healed } } },
+        `🌿 ${p.active.card.name} removes 1 damage counter! (Leech Seed)`,
+      );
     }
   }
 
@@ -564,7 +729,7 @@ export function attack(state: GameState, attackIndex: number): GameState {
   }
 
   // ── Discard opponent's energy (Whirlpool) ────────────────────────────────
-  if (fx.discardOpponentEnergy > 0) {
+  if (fx.discardOpponentEnergy > 0 && !blockDefEffects) {
     const o = next[opponent];
     if (o.active && o.active.attachedEnergy.length > 0) {
       const [removed, ...rest] = o.active.attachedEnergy;
@@ -576,7 +741,7 @@ export function attack(state: GameState, attackIndex: number): GameState {
   }
 
   // ── Force opponent switch (Ninetales Lure, Victreebel Lure) ─────────────
-  if (fx.forceOpponentSwitch) {
+  if (fx.forceOpponentSwitch && !blockDefEffects) {
     const o = next[opponent];
     const benchIdx = o.bench.findIndex(b => b !== null);
     if (o.active && benchIdx >= 0) {
@@ -589,7 +754,7 @@ export function attack(state: GameState, attackIndex: number): GameState {
   }
 
   // ── Return defender to hand (Pidgeot Hurricane) ──────────────────────────
-  if (fx.returnDefender) {
+  if (fx.returnDefender && !blockDefEffects) {
     const o = next[opponent];
     if (o.active && o.active.damageTaken < (o.active.card.hp ?? 999)) {
       const returned = makeCardInstance(o.active.card);
@@ -598,10 +763,46 @@ export function attack(state: GameState, attackIndex: number): GameState {
     }
   }
 
+  // ── Machamp Strikes Back ──────────────────────────────────────────────────
+  if (damage > 0 && isPassivePowerOn(newDefenderActive, 'Strikes Back', state)) {
+    if (flip()) {
+      const p = next[active];
+      if (p.active) {
+        next = log(
+          { ...next, [active]: { ...p, active: { ...p.active, damageTaken: p.active.damageTaken + 10 } } },
+          `⚡ ${newDefenderActive.card.name}'s Strikes Back deals 10 damage to ${p.active.card.name}! (heads)`,
+        );
+      }
+    } else {
+      next = log(next, `${newDefenderActive.card.name}'s Strikes Back — tails, no counter-damage.`);
+    }
+  }
+
+  // ── Ninetales Flash Fire ──────────────────────────────────────────────────
+  if (isPassivePowerOn(newDefenderActive, 'Flash Fire', state)) {
+    const o = next[opponent];
+    const fireEnergy = o.discard.find(c =>
+      c.card.supertype === 'Energy' &&
+      (c.card.types.includes('Fire') || c.card.name.toLowerCase().includes('fire')));
+    if (fireEnergy && o.active) {
+      const attached: EnergyInstance = { uid: makeUID(), type: 'Fire', cardId: fireEnergy.card.id };
+      const newDiscard = o.discard.filter(c => c.uid !== fireEnergy.uid);
+      next = log({
+        ...next,
+        [opponent]: { ...o, active: { ...o.active, attachedEnergy: [...o.active.attachedEnergy, attached] }, discard: newDiscard },
+      }, `🔥 ${o.active.card.name}'s Flash Fire! Retrieved Fire Energy from discard.`);
+    }
+  }
+
   // ── Draw cards (Kangaskhan Fetch) ────────────────────────────────────────
   if (fx.drawCards > 0) {
     for (let i = 0; i < fx.drawCards; i++) next = drawCard(next, active);
     next = log(next, `${attacker.name} draws ${fx.drawCards} card(s).`);
+  }
+
+  // ── Leer — set cantAttackTarget on game state ────────────────────────────
+  if (fx.cantAttackSelf && attacker.active && defender.active) {
+    next = { ...next, cantAttackTarget: { attackerUid: defender.active.uid, targetUid: attacker.active.uid } };
   }
 
   // ── Resolve KOs ──────────────────────────────────────────────────────────
@@ -651,6 +852,9 @@ export function endTurn(state: GameState): GameState {
   if (updatedActive?.statusCondition === 'Asleep') {
     if (flip()) updatedActive = { ...updatedActive, statusCondition: null };
   }
+  // Reset Energy Burn on active pokemon
+  if (updatedActive?.energyBurned) updatedActive = { ...updatedActive, energyBurned: false };
+  // Swords Dance flag persists to next player turn (cleared by attacking, not by end-of-turn)
 
   let next: GameState = {
     ...state,
@@ -660,12 +864,14 @@ export function endTurn(state: GameState): GameState {
       energyPlayedThisTurn: false,
       retreatedThisTurn: false,
       hasAttackedThisTurn: false,
-      attackDamageBonus: 0, // PlusPower discards at end of turn
+      attackDamageBonus: 0,
     },
     activePlayer: opponent,
     turn: state.turn + 1,
     phase: 'draw',
     log: [...state.log, `--- ${state[opponent].name}'s turn ---`],
+    usedPowersThisTurn: [],
+    cantAttackTarget: undefined,
   };
 
   if (updatedActive && isKnockedOut(updatedActive)) {
@@ -687,6 +893,15 @@ export function playTrainer(state: GameState, handUid: string): GameState {
   const name = card.card.name.toLowerCase();
   const id = card.card.id;
 
+  // Dark Vileplume Hay Fever: block trainer cards while in play (either side)
+  const hayFeverActive = (side: 'player1' | 'player2') => {
+    const p = state[side];
+    return p.active !== null && isPassivePowerOn(p.active, 'Hay Fever', state);
+  };
+  if (hayFeverActive('player1') || hayFeverActive('player2')) {
+    return log(state, `${player.name} can't play Trainers — Dark Vileplume's Hay Fever is in effect!`);
+  }
+
   // Remove card from hand and put in discard
   let next: GameState = {
     ...state,
@@ -700,10 +915,26 @@ export function playTrainer(state: GameState, handUid: string): GameState {
 
   // Selection trainers — UI must resolve via resolvePendingTrainer
   if (name === 'energy removal' || id === 'base1-92') {
-    if (!next[opp].active || next[opp].active.attachedEnergy.length === 0) {
-      return log(next, `No energy to remove from ${next[opp].active?.card.name ?? 'opponent'}!`);
+    const o = next[opp];
+    const hasAnyEnergy = (o.active?.attachedEnergy.length ?? 0) > 0
+      || o.bench.some(b => b !== null && b.attachedEnergy.length > 0);
+    if (!hasAnyEnergy) {
+      return log(next, `${o.name} has no Energy attached — can't use Energy Removal!`);
     }
     return { ...next, pendingTrainer: { type: 'energy-removal' } };
+  }
+  if (name === 'super energy removal' || id === 'base1-79') {
+    const p = next[active];
+    const o = next[opp];
+    if ((p.active?.attachedEnergy.length ?? 0) === 0) {
+      return log(next, `${p.name} has no Energy to discard — can't use Super Energy Removal!`);
+    }
+    const hasAnyEnergy = (o.active?.attachedEnergy.length ?? 0) > 0
+      || o.bench.some(b => b !== null && b.attachedEnergy.length > 0);
+    if (!hasAnyEnergy) {
+      return log(next, `${o.name} has no Energy attached — Super Energy Removal has no target!`);
+    }
+    return { ...next, pendingTrainer: { type: 'super-energy-removal' } };
   }
   if (name === 'gust of wind' || id === 'base1-93') {
     if (!next[opp].bench.some(b => b !== null)) {
@@ -712,8 +943,78 @@ export function playTrainer(state: GameState, handUid: string): GameState {
     return { ...next, pendingTrainer: { type: 'gust-of-wind' } };
   }
   if (name === 'pokédex' || name === 'pokedex' || id === 'base1-87') {
-    const top5 = next[active].deck.slice(0, 5).map(c => c.card);
-    return { ...next, pendingTrainer: { type: 'pokedex', cards: top5 } };
+    const top5 = next[active].deck.slice(0, 5);
+    return { ...next, pendingTrainer: { type: 'pokedex', cards: top5.map(c => c.card), cardUids: top5.map(c => c.uid) } };
+  }
+  if (name === 'poké ball' || name === 'pokeball' || id === 'base2-64' || id === 'base4-121') {
+    const p = next[active];
+    const heads = Math.random() < 0.5;
+    if (!heads) return log(next, `${p.name} uses Poké Ball — tails! No effect.`);
+    const pokemonInDeck = p.deck.filter(c => c.card.supertype === 'Pokémon');
+    if (pokemonInDeck.length === 0) {
+      const newDeck = [...p.deck].sort(() => Math.random() - 0.5);
+      return log({ ...next, [active]: { ...p, deck: newDeck } },
+        `${p.name} uses Poké Ball (heads!) — no Pokémon in deck!`);
+    }
+    return { ...next, pendingTrainer: { type: 'pokeball', pokemonUids: pokemonInDeck.map(c => c.uid) } };
+  }
+
+  // ── Maintenance: player picks 2 cards from hand ───────────────────────────
+  if (name === 'maintenance' || id === 'base1-83' || id === 'base4-112') {
+    const p = next[active];
+    if (p.hand.length < 2) return log(next, `${p.name} can't use Maintenance — need 2 cards to shuffle.`);
+    return { ...next, pendingTrainer: { type: 'maintenance' } };
+  }
+
+  // ── Pokémon Trader: player picks hand pokemon then deck pokemon ────────────
+  if (name === 'pokémon trader' || id === 'base1-77' || id === 'base4-106') {
+    const p = next[active];
+    const handPoke = p.hand.filter(c => isPokemon(c.card));
+    const deckPoke = p.deck.filter(c => isPokemon(c.card));
+    if (handPoke.length === 0) return log(next, `${p.name} can't use Pokémon Trader — no Pokémon in hand.`);
+    if (deckPoke.length === 0) return log(next, `${p.name} can't use Pokémon Trader — no Pokémon in deck.`);
+    return { ...next, pendingTrainer: { type: 'pokemon-trader' } };
+  }
+
+  // ── Item Finder: player picks 2 to discard then a trainer from discard ─────
+  if (name === 'item finder' || id === 'base1-74') {
+    const p = next[active];
+    if (p.hand.length < 2) return log(next, `${p.name} can't use Item Finder — need 2 cards to discard.`);
+    const trainers = p.discard.filter(c => c.card.supertype === 'Trainer');
+    if (trainers.length === 0) return log(next, `${p.name} uses Item Finder but has no Trainers in discard.`);
+    return { ...next, pendingTrainer: { type: 'item-finder' } };
+  }
+
+  // ── Recycle: coin flip — heads lets player choose a discard card ──────────
+  if (name === 'recycle' || id === 'base3-61') {
+    const p = next[active];
+    const heads = flip();
+    if (!heads) return log(next, `${p.name} plays Recycle — tails! No effect.`);
+    if (p.discard.length === 0) return log(next, `${p.name} plays Recycle (heads!) but discard is empty.`);
+    return log({ ...next, pendingTrainer: { type: 'recycle' } }, `${p.name} plays Recycle — heads! Choose a card from your discard.`);
+  }
+
+  // ── Pokémon Breeder: play Stage 2 directly onto a Basic ───────────────────
+  if (name === 'pokémon breeder' || id === 'base1-76') {
+    const p = next[active];
+    const stage2s = p.hand.filter(c => isPokemon(c.card) && c.card.evolvesFrom !== null);
+    const hasValidTarget = stage2s.some(s2 => {
+      const stage1Name = s2.card.evolvesFrom!;
+      const stage1 = ALL_CARDS.find(c => c.name === stage1Name);
+      if (!stage1?.evolvesFrom) return false;
+      const basicName = stage1.evolvesFrom;
+      return [p.active, ...p.bench].some(pk => pk !== null && pk.card.name === basicName);
+    });
+    if (!hasValidTarget) return log(next, `${p.name} can't use Pokémon Breeder — no valid Stage 2 / Basic pair.`);
+    return { ...next, pendingTrainer: { type: 'pokemon-breeder' } };
+  }
+
+  // ── Nightly Garbage Run: player picks up to 3 from discard ────────────────
+  if (name === 'nightly garbage run' || id === 'base5-77') {
+    const p = next[active];
+    const eligible = p.discard.filter(c => isPokemon(c.card) || c.card.supertype === 'Energy');
+    if (eligible.length === 0) return log(next, `${p.name} uses Nightly Garbage Run but has no eligible cards in discard.`);
+    return { ...next, pendingTrainer: { type: 'nightly-garbage-run', selectedUids: [] } };
   }
 
   // Delegate to comprehensive handler for all other trainers
@@ -728,16 +1029,68 @@ export function resolvePendingTrainer(state: GameState, choice: number): GameSta
 
   const cleared = { ...state, pendingTrainer: undefined };
 
+  // Step 1 — Energy Removal: choice = -1 for active, 0-4 for bench slot
   if (pending.type === 'energy-removal') {
     const o = cleared[opp];
-    if (!o.active) return cleared;
-    const energies = o.active.attachedEnergy;
+    const targetSlot: 'active' | number = choice === -1 ? 'active' : choice;
+    const targetPoke = targetSlot === 'active' ? o.active : o.bench[targetSlot as number];
+    if (!targetPoke || targetPoke.attachedEnergy.length === 0) return cleared;
+    return { ...cleared, pendingTrainer: { type: 'energy-removal-energy', targetSlot } };
+  }
+  // Step 2 — Energy Removal: choice = energy index to discard
+  if (pending.type === 'energy-removal-energy') {
+    const o = cleared[opp];
+    const { targetSlot } = pending;
+    const targetPoke = targetSlot === 'active' ? o.active : o.bench[targetSlot as number];
+    if (!targetPoke) return cleared;
+    const energies = targetPoke.attachedEnergy;
     const idx = Math.max(0, Math.min(choice, energies.length - 1));
     const removed = energies[idx];
     if (!removed) return cleared;
     const newEnergies = energies.filter((_, i) => i !== idx);
-    return log({ ...cleared, [opp]: { ...o, active: { ...o.active, attachedEnergy: newEnergies } } },
-      `${cleared[active].name} discards ${removed.type} Energy from ${o.active.card.name}!`);
+    const updatedPoke = { ...targetPoke, attachedEnergy: newEnergies };
+    const o2 = targetSlot === 'active'
+      ? { ...o, active: updatedPoke }
+      : (() => { const nb = [...o.bench]; nb[targetSlot as number] = updatedPoke; return { ...o, bench: nb }; })();
+    return log({ ...cleared, [opp]: o2 },
+      `${cleared[active].name} discards ${removed.type} Energy from ${targetPoke.card.name}!`);
+  }
+
+  // Step 1 — Super Energy Removal: choose target pokemon
+  if (pending.type === 'super-energy-removal') {
+    const o = cleared[opp];
+    const targetSlot: 'active' | number = choice === -1 ? 'active' : choice;
+    const targetPoke = targetSlot === 'active' ? o.active : o.bench[targetSlot as number];
+    if (!targetPoke || targetPoke.attachedEnergy.length === 0) return cleared;
+    // Discard 1 energy from active player first
+    const p = cleared[active];
+    if (!p.active || p.active.attachedEnergy.length === 0) return cleared;
+    const [myDiscard, ...myRest] = p.active.attachedEnergy;
+    const myDisEl = fakeEnergyCard(myDiscard.type, myDiscard.cardId);
+    const updatedMyActive = { ...p.active, attachedEnergy: myRest };
+    const next2 = log({
+      ...cleared,
+      [active]: { ...p, active: updatedMyActive, discard: [...p.discard, myDisEl] },
+    }, `${p.name} discards 1 energy for Super Energy Removal.`);
+    return { ...next2, pendingTrainer: { type: 'super-energy-removal-energy', targetSlot } };
+  }
+  // Step 2 — Super Energy Removal: choose 2 energy to remove from target
+  if (pending.type === 'super-energy-removal-energy') {
+    const o = cleared[opp];
+    const { targetSlot } = pending;
+    const targetPoke = targetSlot === 'active' ? o.active : o.bench[targetSlot as number];
+    if (!targetPoke) return cleared;
+    const energies = targetPoke.attachedEnergy;
+    // Remove up to 2
+    const toRemove = energies.slice(0, 2);
+    const remaining = energies.slice(2);
+    const updatedPoke = { ...targetPoke, attachedEnergy: remaining };
+    const o2 = targetSlot === 'active'
+      ? { ...o, active: updatedPoke }
+      : (() => { const nb = [...o.bench]; nb[targetSlot as number] = updatedPoke; return { ...o, bench: nb }; })();
+    const removedNames = toRemove.map(e => e.type).join(' + ');
+    return log({ ...cleared, [opp]: o2 },
+      `${cleared[active].name} removes ${removedNames} Energy from ${targetPoke.card.name}! (Super Energy Removal)`);
   }
 
   if (pending.type === 'gust-of-wind') {
@@ -752,7 +1105,203 @@ export function resolvePendingTrainer(state: GameState, choice: number): GameSta
   }
 
   if (pending.type === 'pokedex') {
+    // choice encodes the new ordering as a JSON-encoded array of UIDs via a separate action
+    // In the basic resolve path, just clear and apply default order
     return cleared;
+  }
+
+  return cleared;
+}
+
+// ─── Pokemon Trader resolution ───────────────────────────────────────────────
+
+export function resolvePokemonTrader(state: GameState, uid: string): GameState {
+  const pending = state.pendingTrainer;
+  const active = state.activePlayer;
+  const player = state[active];
+  const cleared = { ...state, pendingTrainer: undefined };
+
+  if (pending?.type === 'pokemon-trader') {
+    const handCard = player.hand.find(c => c.uid === uid);
+    if (!handCard || !isPokemon(handCard.card)) return state;
+    return { ...state, pendingTrainer: { type: 'pokemon-trader-deck', handUid: uid } };
+  }
+
+  if (pending?.type === 'pokemon-trader-deck') {
+    const deckCard = player.deck.find(c => c.uid === uid);
+    const handCard = player.hand.find(c => c.uid === pending.handUid);
+    if (!handCard || !deckCard) return cleared;
+    const newHand = player.hand.filter(c => c.uid !== handCard.uid).concat([deckCard]);
+    const newDeck = shuffle(player.deck.filter(c => c.uid !== deckCard.uid).concat([handCard]));
+    return log({ ...cleared, [active]: { ...player, hand: newHand, deck: newDeck } },
+      `${player.name} trades ${handCard.card.name} for ${deckCard.card.name} from deck.`);
+  }
+
+  return cleared;
+}
+
+// ─── Maintenance resolution ──────────────────────────────────────────────────
+
+export function resolveMaintenance(state: GameState, uid: string): GameState {
+  const pending = state.pendingTrainer;
+  const active = state.activePlayer;
+  const player = state[active];
+
+  if (pending?.type === 'maintenance') {
+    const card = player.hand.find(c => c.uid === uid);
+    if (!card) return state;
+    return { ...state, pendingTrainer: { type: 'maintenance-second', firstUid: uid } };
+  }
+
+  if (pending?.type === 'maintenance-second') {
+    if (uid === pending.firstUid) return state;
+    const first = player.hand.find(c => c.uid === pending.firstUid);
+    const second = player.hand.find(c => c.uid === uid);
+    if (!first || !second) return { ...state, pendingTrainer: undefined };
+    const restHand = player.hand.filter(c => c.uid !== pending.firstUid && c.uid !== uid);
+    const newDeck = shuffle([...player.deck, first, second]);
+    let next: GameState = { ...state, pendingTrainer: undefined, [active]: { ...player, hand: restHand, deck: newDeck } };
+    next = drawCard(next, active);
+    return log(next, `${player.name} shuffles 2 cards into deck and draws 1.`);
+  }
+
+  return { ...state, pendingTrainer: undefined };
+}
+
+// ─── Item Finder resolution ──────────────────────────────────────────────────
+
+export function resolveItemFinder(state: GameState, uid: string): GameState {
+  const pending = state.pendingTrainer;
+  const active = state.activePlayer;
+  const player = state[active];
+
+  if (pending?.type === 'item-finder') {
+    const card = player.hand.find(c => c.uid === uid);
+    if (!card) return state;
+    return { ...state, pendingTrainer: { type: 'item-finder-second', firstUid: uid } };
+  }
+
+  if (pending?.type === 'item-finder-second') {
+    if (uid === pending.firstUid) return state;
+    const second = player.hand.find(c => c.uid === uid);
+    if (!second) return state;
+    return { ...state, pendingTrainer: { type: 'item-finder-trainer', firstUid: pending.firstUid, secondUid: uid } };
+  }
+
+  if (pending?.type === 'item-finder-trainer') {
+    const first = player.hand.find(c => c.uid === pending.firstUid);
+    const second = player.hand.find(c => c.uid === pending.secondUid);
+    const trainerCard = player.discard.find(c => c.uid === uid);
+    if (!first || !second || !trainerCard || trainerCard.card.supertype !== 'Trainer') {
+      return { ...state, pendingTrainer: undefined };
+    }
+    const restHand = player.hand.filter(c => c.uid !== pending.firstUid && c.uid !== pending.secondUid);
+    const newDiscard = player.discard.filter(c => c.uid !== uid).concat([first, second]);
+    return log(
+      { ...state, pendingTrainer: undefined, [active]: { ...player, hand: [...restHand, trainerCard], discard: newDiscard } },
+      `${player.name} uses Item Finder to recover ${trainerCard.card.name}!`,
+    );
+  }
+
+  return { ...state, pendingTrainer: undefined };
+}
+
+// ─── Nightly Garbage Run resolution ─────────────────────────────────────────
+
+export function resolveNightlyGarbageRun(state: GameState, uid: string | null): GameState {
+  const pending = state.pendingTrainer;
+  const active = state.activePlayer;
+  const player = state[active];
+  if (pending?.type !== 'nightly-garbage-run') return state;
+
+  // null = confirm selection
+  if (uid === null) {
+    const selected = pending.selectedUids
+      .map(id => player.discard.find(c => c.uid === id))
+      .filter(Boolean) as import('./GameState').CardInstance[];
+    const newDiscard = player.discard.filter(c => !pending.selectedUids.includes(c.uid));
+    const newDeck = shuffle([...player.deck, ...selected]);
+    return log(
+      { ...state, pendingTrainer: undefined, [active]: { ...player, discard: newDiscard, deck: newDeck } },
+      `${player.name} shuffles ${selected.length} card(s) from discard into deck (Nightly Garbage Run).`,
+    );
+  }
+
+  // Toggle selection (max 3)
+  const already = pending.selectedUids.includes(uid);
+  if (already) {
+    return { ...state, pendingTrainer: { ...pending, selectedUids: pending.selectedUids.filter(u => u !== uid) } };
+  }
+  if (pending.selectedUids.length >= 3) return state;
+  return { ...state, pendingTrainer: { ...pending, selectedUids: [...pending.selectedUids, uid] } };
+}
+
+// ─── Recycle resolution ──────────────────────────────────────────────────────
+
+export function resolveRecycle(state: GameState, uid: string): GameState {
+  if (state.pendingTrainer?.type !== 'recycle') return state;
+  const active = state.activePlayer;
+  const player = state[active];
+  const chosen = player.discard.find(c => c.uid === uid);
+  if (!chosen) return state;
+  const newDiscard = player.discard.filter(c => c.uid !== uid);
+  return log(
+    { ...state, pendingTrainer: undefined, [active]: { ...player, deck: [chosen, ...player.deck], discard: newDiscard } },
+    `${player.name} puts ${chosen.card.name} on top of the deck (Recycle).`,
+  );
+}
+
+// ─── Pokémon Breeder resolution ──────────────────────────────────────────────
+
+export function resolvePokemonBreeder(state: GameState, uid: string): GameState {
+  const pending = state.pendingTrainer;
+  const active = state.activePlayer;
+  const player = state[active];
+  const cleared = { ...state, pendingTrainer: undefined };
+
+  if (pending?.type === 'pokemon-breeder') {
+    // uid = hand card UID (must be Stage 2)
+    const stage2Card = player.hand.find(c => c.uid === uid);
+    if (!stage2Card || !isPokemon(stage2Card.card) || !stage2Card.card.evolvesFrom) return state;
+    return { ...state, pendingTrainer: { type: 'pokemon-breeder-target', stage2Uid: uid } };
+  }
+
+  if (pending?.type === 'pokemon-breeder-target') {
+    // uid = in-play Pokémon UID (must be the Basic that chains to the Stage 2)
+    const stage2Card = player.hand.find(c => c.uid === pending.stage2Uid);
+    if (!stage2Card) return cleared;
+
+    const stage1Name = stage2Card.card.evolvesFrom!;
+    const stage1Data = ALL_CARDS.find(c => c.name === stage1Name);
+    const basicName = stage1Data?.evolvesFrom ?? null;
+
+    const applyBreeder = (pk: InPlayPokemon | null): InPlayPokemon | null => {
+      if (!pk || pk.uid !== uid) return pk;
+      if (pk.card.name !== basicName) return pk;
+      const damageTaken = Math.min(pk.damageTaken, (stage2Card.card.hp ?? 0) - 1);
+      return {
+        ...pk,
+        card: stage2Card.card,
+        currentHP: stage2Card.card.hp ?? pk.currentHP,
+        damageTaken,
+        evolvedFrom: [...pk.evolvedFrom, pk.card],
+        turnPlayed: pk.turnPlayed,
+      };
+    };
+
+    const newActive = applyBreeder(player.active);
+    const newBench = player.bench.map(applyBreeder) as (InPlayPokemon | null)[];
+
+    if (newActive === player.active && newBench.every((b, i) => b === player.bench[i])) {
+      return log(cleared, `Pokémon Breeder: target must be a Basic that ${stage2Card.card.name} evolves from.`);
+    }
+
+    const targetName = (newActive?.uid === uid ? newActive?.card.name :
+      newBench.find(b => b?.uid === uid)?.card.name) ?? stage2Card.card.name;
+    return log(
+      { ...cleared, [active]: { ...player, hand: player.hand.filter(c => c.uid !== pending.stage2Uid), active: newActive, bench: newBench } },
+      `${player.name} uses Pokémon Breeder to evolve directly into ${targetName}!`,
+    );
   }
 
   return cleared;
@@ -766,6 +1315,16 @@ export function evolve(state: GameState, handUid: string, targetUid: string): Ga
   const evoCard = player.hand.find(c => c.uid === handUid);
 
   if (!evoCard || !isPokemon(evoCard.card) || !evoCard.card.evolvesFrom) return state;
+
+  // Aerodactyl Prehistoric Power: block all evolution while in play
+  for (const side of ['player1', 'player2'] as const) {
+    const p = state[side];
+    const hasAero = (p.active && isPassivePowerOn(p.active, 'Prehistoric Power', state))
+      || p.bench.some(b => b !== null && isPassivePowerOn(b, 'Prehistoric Power', state));
+    if (hasAero) {
+      return log(state, `⚠️ Aerodactyl's Prehistoric Power prevents all Evolution!`);
+    }
+  }
 
   const evolveTarget = (pokemon: InPlayPokemon | null): InPlayPokemon | null => {
     if (!pokemon || pokemon.uid !== targetUid) return pokemon;
@@ -781,6 +1340,7 @@ export function evolve(state: GameState, handUid: string, targetUid: string): Ga
       statusCondition: null,
       turnPlayed: state.turn,
       evolvedFrom: [...pokemon.evolvedFrom, pokemon.card],
+      energyBurned: false,
     };
   };
 
@@ -795,4 +1355,191 @@ export function evolve(state: GameState, handUid: string, targetUid: string): Ga
   const newHand = player.hand.filter(c => c.uid !== handUid);
   const updated = { ...player, hand: newHand, active: newActive, bench: newBench };
   return log({ ...state, [active]: updated }, `${player.name} evolves into ${targetName}.`);
+}
+
+// ─── Poké Ball resolve ───────────────────────────────────────────────────────
+
+export function resolvePokeball(state: GameState, chosenUid: string): GameState {
+  if (state.pendingTrainer?.type !== 'pokeball') return state;
+  const active = state.activePlayer;
+  const player = state[active];
+  const chosen = player.deck.find(c => c.uid === chosenUid);
+  if (!chosen) return state;
+  const newDeck = [...player.deck.filter(c => c.uid !== chosenUid)].sort(() => Math.random() - 0.5);
+  return log(
+    { ...state, [active]: { ...player, hand: [...player.hand, chosen], deck: newDeck }, pendingTrainer: undefined },
+    `${player.name} uses Poké Ball — fetched ${chosen.card.name}!`,
+  );
+}
+
+// ─── Pokédex reorder ─────────────────────────────────────────────────────────
+
+export function resolvePokedex(state: GameState, orderedUids: string[]): GameState {
+  if (state.pendingTrainer?.type !== 'pokedex') return state;
+  const active = state.activePlayer;
+  const player = state[active];
+  const top5Uids = state.pendingTrainer.cardUids;
+  // Build the reordered top-5 from the deck based on orderedUids
+  const reordered = orderedUids.map(uid => player.deck.find(c => c.uid === uid)).filter(Boolean) as CardInstance[];
+  // Rest of deck (cards not in the top 5)
+  const rest = player.deck.filter(c => !top5Uids.includes(c.uid));
+  const newDeck = [...reordered, ...rest];
+  return log({ ...state, [active]: { ...player, deck: newDeck }, pendingTrainer: undefined },
+    `${player.name} rearranges the top ${reordered.length} card(s) of their deck.`);
+}
+
+// ─── Active Pokémon Powers ────────────────────────────────────────────────────
+
+// Vileplume Heal: remove 1 damage counter from each of your Pokémon (once per turn)
+export function useVileplumHeal(state: GameState): GameState {
+  const active = state.activePlayer;
+  const player = state[active];
+  const vileplume = [player.active, ...player.bench].find(
+    p => p !== null && isActivePowerOn(p, 'Heal', state),
+  ) as InPlayPokemon | undefined;
+  if (!vileplume) return log(state, 'No Vileplume with Heal power available.');
+  if (powerUsed(state, vileplume.uid, 'Heal')) return log(state, 'Heal power already used this turn.');
+  const heal = (p: InPlayPokemon | null) => p ? { ...p, damageTaken: Math.max(0, p.damageTaken - 10) } : null;
+  let next = {
+    ...state,
+    [active]: { ...player, active: heal(player.active), bench: player.bench.map(heal) as (InPlayPokemon | null)[] },
+  };
+  next = markPowerUsed(next, vileplume.uid, 'Heal');
+  return log(next, `🌸 ${player.name} uses Vileplume's Heal — 1 damage counter removed from each Pokémon!`);
+}
+
+// Charizard Energy Burn: all attached energy counts as Fire this turn
+export function useEnergyBurn(state: GameState): GameState {
+  const active = state.activePlayer;
+  const player = state[active];
+  if (!player.active || !isActivePowerOn(player.active, 'Energy Burn', state)) {
+    return log(state, 'No Charizard with Energy Burn available.');
+  }
+  const updated = { ...player.active, energyBurned: true };
+  return log({ ...state, [active]: { ...player, active: updated } },
+    `🔥 ${player.name} uses Energy Burn — all energy on ${player.active.card.name} is now Fire!`);
+}
+
+// Blastoise Rain Dance: attach Water Energy from hand to any Water Pokémon (no per-turn limit)
+export function useRainDance(state: GameState, energyHandUid: string, targetUid: string): GameState {
+  const active = state.activePlayer;
+  const player = state[active];
+  const blastoise = [player.active, ...player.bench].find(
+    p => p !== null && isActivePowerOn(p, 'Rain Dance', state),
+  );
+  if (!blastoise) return log(state, 'No Blastoise with Rain Dance available.');
+  const energyCard = player.hand.find(c => c.uid === energyHandUid);
+  if (!energyCard || energyCard.card.supertype !== 'Energy') return state;
+  const isWater = energyCard.card.types.includes('Water') || energyCard.card.name.toLowerCase().includes('water');
+  if (!isWater) return log(state, 'Rain Dance only works with Water Energy cards!');
+  const attach = (p: InPlayPokemon | null): InPlayPokemon | null => {
+    if (!p || p.uid !== targetUid) return p;
+    if (!p.card.types.includes('Water')) return p; // must be Water Pokémon
+    const inst: EnergyInstance = { uid: makeUID(), type: 'Water', cardId: energyCard.card.id };
+    return { ...p, attachedEnergy: [...p.attachedEnergy, inst] };
+  };
+  const newActive = attach(player.active);
+  const newBench = player.bench.map(attach) as (InPlayPokemon | null)[];
+  if (newActive === player.active && newBench.every((b, i) => b === player.bench[i])) {
+    return log(state, 'Rain Dance: target must be a Water Pokémon!');
+  }
+  const targetName = (newActive?.uid === targetUid ? newActive?.card.name
+    : newBench.find(b => b?.uid === targetUid)?.card.name) ?? 'Pokémon';
+  return log({ ...state, [active]: { ...player, hand: player.hand.filter(c => c.uid !== energyHandUid), active: newActive, bench: newBench } },
+    `💧 Rain Dance: Water Energy attached to ${targetName}!`);
+}
+
+// Venusaur Energy Trans: move 1 energy from one of your Pokémon to another (unlimited per turn)
+export function useEnergyTrans(state: GameState, fromUid: string, energyIdx: number, toUid: string): GameState {
+  const active = state.activePlayer;
+  const player = state[active];
+  const venusaur = [player.active, ...player.bench].find(
+    p => p !== null && isActivePowerOn(p, 'Energy Trans', state),
+  );
+  if (!venusaur) return log(state, 'No Venusaur with Energy Trans available.');
+  const fromPoke = [player.active, ...player.bench].find(p => p?.uid === fromUid) as InPlayPokemon | undefined;
+  if (!fromPoke || energyIdx < 0 || energyIdx >= fromPoke.attachedEnergy.length) return state;
+  const energyToMove = fromPoke.attachedEnergy[energyIdx];
+  const updatedFrom = { ...fromPoke, attachedEnergy: fromPoke.attachedEnergy.filter((_, i) => i !== energyIdx) };
+  let next = setPokemonInPlay(state, fromUid, updatedFrom);
+  const toPoke = [next[active].active, ...next[active].bench].find(p => p?.uid === toUid) as InPlayPokemon | undefined;
+  if (!toPoke) return state;
+  const updatedTo = { ...toPoke, attachedEnergy: [...toPoke.attachedEnergy, energyToMove] };
+  next = setPokemonInPlay(next, toUid, updatedTo);
+  return log(next, `🌿 Energy Trans: ${energyToMove.type} Energy moved from ${fromPoke.card.name} to ${toPoke.card.name}.`);
+}
+
+// Alakazam Damage Swap: move 1 damage counter between your Pokémon (can't KO destination)
+export function useDamageSwap(state: GameState, fromUid: string, toUid: string): GameState {
+  const active = state.activePlayer;
+  const player = state[active];
+  const alakazam = [player.active, ...player.bench].find(
+    p => p !== null && isActivePowerOn(p, 'Damage Swap', state),
+  );
+  if (!alakazam) return log(state, 'No Alakazam with Damage Swap available.');
+  const fromPoke = [player.active, ...player.bench].find(p => p?.uid === fromUid) as InPlayPokemon | undefined;
+  const toPoke = [player.active, ...player.bench].find(p => p?.uid === toUid) as InPlayPokemon | undefined;
+  if (!fromPoke || !toPoke || fromPoke.uid === toPoke.uid) return state;
+  if (fromPoke.damageTaken < 10) return log(state, 'No damage counters to move from that Pokémon.');
+  if (toPoke.damageTaken + 10 >= (toPoke.card.hp ?? 0)) {
+    return log(state, `Damage Swap would knock out ${toPoke.card.name} — not allowed!`);
+  }
+  let next = setPokemonInPlay(state, fromUid, { ...fromPoke, damageTaken: fromPoke.damageTaken - 10 });
+  next = setPokemonInPlay(next, toUid, { ...toPoke, damageTaken: toPoke.damageTaken + 10 });
+  return log(next, `🔮 Damage Swap: 10 damage moved from ${fromPoke.card.name} to ${toPoke.card.name}.`);
+}
+
+// Gengar Curse: move 1 damage counter between opponent's Pokémon (once per turn)
+export function useGengarCurse(state: GameState, fromOppUid: string, toOppUid: string): GameState {
+  const active = state.activePlayer;
+  const opp = active === 'player1' ? 'player2' : 'player1';
+  const player = state[active];
+  const opponent = state[opp];
+  const gengar = [player.active, ...player.bench].find(
+    p => p !== null && isActivePowerOn(p, 'Curse', state),
+  ) as InPlayPokemon | undefined;
+  if (!gengar) return log(state, 'No Gengar with Curse available.');
+  if (powerUsed(state, gengar.uid, 'Curse')) return log(state, 'Curse already used this turn.');
+  const fromPoke = [opponent.active, ...opponent.bench].find(p => p?.uid === fromOppUid) as InPlayPokemon | undefined;
+  const toPoke = [opponent.active, ...opponent.bench].find(p => p?.uid === toOppUid) as InPlayPokemon | undefined;
+  if (!fromPoke || !toPoke || fromPoke.uid === toPoke.uid) return state;
+  if (fromPoke.damageTaken < 10) return log(state, `${fromPoke.card.name} has no damage counters.`);
+  let next = setPokemonInPlay(state, fromOppUid, { ...fromPoke, damageTaken: fromPoke.damageTaken - 10 });
+  next = setPokemonInPlay(next, toOppUid, { ...toPoke, damageTaken: toPoke.damageTaken + 10 });
+  next = markPowerUsed(next, gengar.uid, 'Curse');
+  next = log(next, `👻 Curse: damage counter moved from ${fromPoke.card.name} to ${toPoke.card.name}.`);
+  // Check if the destination pokemon is now KO'd
+  const toPokeAfter = [next[opp].active, ...next[opp].bench].find(p => p?.uid === toOppUid);
+  if (toPokeAfter && isKnockedOut(toPokeAfter)) {
+    next = resolveKO(next, opp, active);
+    next = checkWinConditions(next);
+  }
+  return next;
+}
+
+// Electrode Buzzap: KO Electrode from bench, attach it as 2 energy to a Pokémon
+export function useBuzzap(state: GameState, benchSlot: number, targetUid: string, energyType: EnergyType): GameState {
+  const active = state.activePlayer;
+  const player = state[active];
+  const electrode = player.bench[benchSlot];
+  if (!electrode || !isActivePowerOn(electrode, 'Buzzap', state)) {
+    return log(state, 'No Electrode with Buzzap on that bench slot.');
+  }
+  const allPoke = [player.active, ...player.bench];
+  const targetPoke = allPoke.find(p => p?.uid === targetUid && p.uid !== electrode.uid) as InPlayPokemon | undefined;
+  if (!targetPoke) return log(state, 'Invalid Buzzap target.');
+  // KO Electrode
+  const electrodeCard = makeCardInstance(electrode.card);
+  const electrodeEnergy = electrode.attachedEnergy.map(e => fakeEnergyCard(e.type, e.cardId));
+  const newBench = [...player.bench]; newBench[benchSlot] = null;
+  // Give 2 energy of chosen type to target
+  const e1: EnergyInstance = { uid: makeUID(), type: energyType, cardId: electrode.card.id };
+  const e2: EnergyInstance = { uid: makeUID(), type: energyType, cardId: electrode.card.id };
+  const updatedTarget = { ...targetPoke, attachedEnergy: [...targetPoke.attachedEnergy, e1, e2] };
+  const newActive = targetPoke.uid === player.active?.uid ? updatedTarget : player.active;
+  const finalBench = newBench.map(b => b?.uid === targetPoke.uid ? updatedTarget : b) as (InPlayPokemon | null)[];
+  return log({
+    ...state,
+    [active]: { ...player, active: newActive, bench: finalBench, discard: [...player.discard, electrodeCard, ...electrodeEnergy] },
+  }, `⚡ Buzzap! ${electrode.card.name} sacrificed — 2 ${energyType} Energy attached to ${targetPoke.card.name}!`);
 }

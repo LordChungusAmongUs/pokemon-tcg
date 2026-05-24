@@ -72,6 +72,8 @@ export interface InPlayPokemon {
   turnPlayed: number;    // turn number it was placed; can't evolve same turn
   isFirstTurn: boolean;  // true if it was active at start of game (can't retreat t1)
   evolvedFrom: CardData[]; // previous cards in evolution chain (oldest first)
+  energyBurned: boolean; // Charizard Energy Burn — all attached energy counts as Fire this turn
+  swordsDanceActive: boolean; // Scyther Swords Dance — next Slash does 60 instead of 30
 }
 
 export type GamePhase =
@@ -99,8 +101,23 @@ export interface PlayerState {
 
 export type PendingTrainer =
   | { type: 'energy-removal' }
+  | { type: 'energy-removal-energy'; targetSlot: 'active' | number }
+  | { type: 'super-energy-removal' }
+  | { type: 'super-energy-removal-energy'; targetSlot: 'active' | number }
   | { type: 'gust-of-wind' }
-  | { type: 'pokedex'; cards: CardData[] };
+  | { type: 'pokedex'; cards: CardData[]; cardUids: string[] }
+  | { type: 'pokeball'; pokemonUids: string[] }
+  | { type: 'pokemon-trader' }
+  | { type: 'pokemon-trader-deck'; handUid: string }
+  | { type: 'maintenance' }
+  | { type: 'maintenance-second'; firstUid: string }
+  | { type: 'item-finder' }
+  | { type: 'item-finder-second'; firstUid: string }
+  | { type: 'item-finder-trainer'; firstUid: string; secondUid: string }
+  | { type: 'nightly-garbage-run'; selectedUids: string[] }
+  | { type: 'pokemon-breeder' }
+  | { type: 'pokemon-breeder-target'; stage2Uid: string }
+  | { type: 'recycle' };
 
 export interface GameState {
   phase: GamePhase;
@@ -113,7 +130,10 @@ export interface GameState {
   log: string[];
   pendingCoinFlip: boolean;
   pendingTrainer?: PendingTrainer;
+  pendingRetreat?: { benchSlot: number; cost: number };
   mode: 'vs-ai' | 'local-2p';
+  usedPowersThisTurn: string[];  // "${uid}:${powerName}" for once-per-turn powers
+  cantAttackTarget?: { attackerUid: string; targetUid: string }; // Leer-type: attacker can't attack targetUid
 }
 
 export interface SelectedDeck {

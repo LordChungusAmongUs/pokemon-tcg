@@ -7,11 +7,45 @@ import type { CardData } from '@/engine/GameState';
 import Link from 'next/link';
 import { FORMATS } from '@/lib/formats';
 import { useAuthStore } from '@/store/authStore';
+import { pokedexNumber, SET_RELEASE_ORDER } from '@/lib/pokedex';
 
 const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl']);
 const PLAYABLE_CARDS = ALL_CARDS.filter(c => !EXCLUDED.has(c.set));
 const SUPERTYPES = ['All', 'Pokémon', 'Trainer', 'Energy'];
 const SETS = ['All', ...Array.from(new Set(PLAYABLE_CARDS.map(c => c.set))).sort()];
+
+// Type order for Japanese-set-style sorting
+const TYPE_ORDER: string[] = ['Grass', 'Fire', 'Water', 'Lightning', 'Psychic', 'Fighting', 'Colorless', 'Darkness', 'Metal', 'Dragon', 'Fairy'];
+
+function japaneseSort(cards: typeof PLAYABLE_CARDS): typeof PLAYABLE_CARDS {
+  return [...cards].sort((a, b) => {
+    const supertypeOrder = (s: string) => s === 'Pokémon' ? 0 : s === 'Trainer' ? 1 : 2;
+    if (supertypeOrder(a.supertype) !== supertypeOrder(b.supertype))
+      return supertypeOrder(a.supertype) - supertypeOrder(b.supertype);
+
+    if (a.supertype === 'Pokémon') {
+      // 1. Energy type
+      const aTypeIdx = TYPE_ORDER.indexOf(a.types?.[0] ?? 'Colorless');
+      const bTypeIdx = TYPE_ORDER.indexOf(b.types?.[0] ?? 'Colorless');
+      if (aTypeIdx !== bTypeIdx) return (aTypeIdx === -1 ? 99 : aTypeIdx) - (bTypeIdx === -1 ? 99 : bTypeIdx);
+      // 2. Pokédex number
+      const aDex = pokedexNumber(a.name);
+      const bDex = pokedexNumber(b.name);
+      if (aDex !== bDex) return aDex - bDex;
+      // 3. Set release order
+      const aSet = SET_RELEASE_ORDER[a.set] ?? 99;
+      const bSet = SET_RELEASE_ORDER[b.set] ?? 99;
+      if (aSet !== bSet) return aSet - bSet;
+      // 4. Card number within set
+      const aNum = parseInt(a.number ?? '9999', 10) || 9999;
+      const bNum = parseInt(b.number ?? '9999', 10) || 9999;
+      return aNum - bNum;
+    }
+
+    // Trainers and Energy: alphabetical by name
+    return a.name.localeCompare(b.name);
+  });
+}
 
 export default function PokedexPage() {
   const { collection, encountered } = useAuthStore();
@@ -21,11 +55,13 @@ export default function PokedexPage() {
   const [format, setFormat] = useState('');
   const [tab, setTab] = useState<'owned' | 'seen' | 'all'>('owned');
   const [detail, setDetail] = useState<CardData | null>(null);
+  const [sortMode, setSortMode] = useState<'default' | 'japanese'>('default');
 
   const activeFormat = FORMATS.find(f => f.id === format);
   const formatSetNames = activeFormat ? new Set(activeFormat.sets) : null;
 
-  const filtered = useMemo(() => PLAYABLE_CARDS.filter(c => {
+  const filtered = useMemo(() => {
+    const base = PLAYABLE_CARDS.filter(c => {
     const ownedQty = collection[c.id] ?? 0;
     const seen = encountered.has(c.id);
 
@@ -39,9 +75,11 @@ export default function PokedexPage() {
     } else {
       if (set !== 'All' && c.set !== set) return false;
     }
-    if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  }), [search, supertype, set, format, tab, collection, encountered]);
+      if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    });
+    return sortMode === 'japanese' ? japaneseSort(base) : base;
+  }, [search, supertype, set, format, tab, collection, encountered, sortMode]);
 
   const ownedCount = PLAYABLE_CARDS.filter(c => (collection[c.id] ?? 0) > 0).length;
   const seenCount  = PLAYABLE_CARDS.filter(c => encountered.has(c.id)).length;
@@ -104,6 +142,14 @@ export default function PokedexPage() {
           <span className="text-gray-400 text-sm py-1 whitespace-nowrap">
             {filtered.length} cards
           </span>
+          <button
+            onClick={() => setSortMode(m => m === 'default' ? 'japanese' : 'default')}
+            className={`px-2 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+              sortMode === 'japanese' ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            {sortMode === 'japanese' ? '🇯🇵 JP Order' : '🔢 JP Order'}
+          </button>
         </div>
       </div>
 

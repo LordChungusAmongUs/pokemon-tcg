@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
@@ -12,38 +12,28 @@ import type { CardData, EnergyType } from '@/engine/GameState';
 
 const BROWSE_CARDS = [...ALL_CARDS, ...BASIC_ENERGY_CARDS];
 
-function buildSealedDeck(opened: CardData[]): CardData[] {
-  const pokemon  = opened.filter(c => c.supertype === 'Pokémon');
-  const trainers = opened.filter(c => c.supertype === 'Trainer');
-  const energy   = opened.filter(c => c.supertype === 'Energy');
-
-  let deck: CardData[] = [...pokemon, ...trainers, ...energy];
-
-  // Determine which energy types our Pokémon need
-  const typesNeeded = new Set(pokemon.flatMap(p => p.types as EnergyType[]));
-  if (typesNeeded.size === 0) typesNeeded.add('Colorless');
-
-  // Fill remaining slots with basic energy of needed types, round-robin
-  const fillEnergy = BASIC_ENERGY_CARDS.filter(e => typesNeeded.has(e.types[0] as EnergyType));
-  if (fillEnergy.length === 0) fillEnergy.push(...BASIC_ENERGY_CARDS);
-
-  let idx = 0;
-  while (deck.length < 40) {
-    deck.push(fillEnergy[idx % fillEnergy.length]);
-    idx++;
-  }
-
-  return deck.slice(0, 40);
-}
+const ALL_ENERGY_TYPES: EnergyType[] = ['Fire', 'Water', 'Grass', 'Lightning', 'Psychic', 'Fighting', 'Colorless', 'Darkness', 'Metal'];
+const ENERGY_COLORS: Record<EnergyType, string> = {
+  Fire: 'bg-red-600 hover:bg-red-500',
+  Water: 'bg-blue-600 hover:bg-blue-500',
+  Grass: 'bg-green-600 hover:bg-green-500',
+  Lightning: 'bg-yellow-500 hover:bg-yellow-400 text-black',
+  Psychic: 'bg-purple-600 hover:bg-purple-500',
+  Fighting: 'bg-orange-700 hover:bg-orange-600',
+  Colorless: 'bg-gray-500 hover:bg-gray-400',
+  Darkness: 'bg-gray-800 hover:bg-gray-700 border border-gray-600',
+  Metal: 'bg-slate-500 hover:bg-slate-400',
+};
 
 export default function PrereleasePage() {
   const router = useRouter();
   const { user, prereleaseInvites, usePrereleaseInvite, addToCollection, collection } = useAuthStore();
   const { startGame } = useGameStore();
 
-  const [phase, setPhase] = useState<'list' | 'opening' | 'ready'>('list');
+  const [phase, setPhase] = useState<'list' | 'opening' | 'building'>('list');
   const [activeSet, setActiveSet] = useState<string | null>(null);
   const [openedCards, setOpenedCards] = useState<CardData[]>([]);
+  const [buildingDeck, setBuildingDeck] = useState<CardData[]>([]);
 
   if (!user) {
     return (
@@ -102,8 +92,15 @@ export default function PrereleasePage() {
     setPhase('opening');
   }
 
+  function goToBuilding() {
+    // Auto-seed the deck with all non-energy pool cards as a starting point
+    const nonEnergy = openedCards.filter(c => c.supertype !== 'Energy');
+    setBuildingDeck(nonEnergy);
+    setPhase('building');
+  }
+
   function startBattle() {
-    if (!activeSet || openedCards.length === 0) return;
+    if (!activeSet || buildingDeck.length === 0) return;
 
     // Build AI deck from a random unlocked starter
     const availableDecks = getAvailableAIDecks(collection, isSetUnlocked);
@@ -112,12 +109,11 @@ export default function PrereleasePage() {
       .map(id => BROWSE_CARDS.find(c => c.id === id))
       .filter(Boolean) as CardData[];
 
-    const playerDeck = buildSealedDeck(openedCards);
+    const playerDeck = [...buildingDeck];
 
     // Ensure player deck has at least 1 basic
     const hasBasic = playerDeck.some(c => isBasicPokemon(c));
     if (!hasBasic) {
-      // fallback: add a starter deck pokemon
       const fallback = BROWSE_CARDS.find(c => isBasicPokemon(c));
       if (fallback) playerDeck.unshift(fallback);
     }
@@ -189,47 +185,233 @@ export default function PrereleasePage() {
             ))}
           </div>
           <div className="bg-gray-800 rounded-xl p-4 text-sm text-gray-300 space-y-1">
-            <p className="font-bold text-white">Your sealed deck will be auto-built:</p>
-            <p>• All Pokémon + Trainers from your pool</p>
-            <p>• Filled to 40 cards with basic energy matching your types</p>
+            <p className="font-bold text-white">Build your sealed deck:</p>
+            <p>• Choose which pulled cards to include</p>
+            <p>• Add unlimited basic energy of any type</p>
+            <p>• Aim for 40 cards (min. 20 to battle)</p>
           </div>
           <button
-            onClick={() => setPhase('ready')}
+            onClick={goToBuilding}
             className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-lg"
           >
-            Build Deck & Battle →
+            Build My Deck →
           </button>
         </div>
       </div>
     );
   }
 
-  // ── Ready to battle ────────────────────────────────────────────────────────
-  const deck = buildSealedDeck(openedCards);
-  const pokemon = deck.filter(c => c.supertype === 'Pokémon');
-  const trainers = deck.filter(c => c.supertype === 'Trainer');
-  const energy = deck.filter(c => c.supertype === 'Energy');
+  // ── Deck Builder ────────────────────────────────────────────────────────────
+  const deckCount = buildingDeck.length;
+  const deckHasBasic = buildingDeck.some(c => isBasicPokemon(c));
+  const canStart = deckCount >= 20 && deckHasBasic;
+
+  // Count how many of each opened card are in the deck
+  function countInDeck(card: CardData) {
+    return buildingDeck.filter(c => c.id === card.id).length;
+  }
+  function countInPool(card: CardData) {
+    return openedCards.filter(c => c.id === card.id).length;
+  }
+
+  function addCardToDeck(card: CardData) {
+    if (buildingDeck.length >= 60) return;
+    setBuildingDeck(prev => [...prev, card]);
+  }
+  function removeCardFromDeck(card: CardData) {
+    const idx = buildingDeck.map(c => c.id).lastIndexOf(card.id);
+    if (idx < 0) return;
+    setBuildingDeck(prev => { const a = [...prev]; a.splice(idx, 1); return a; });
+  }
+  function addEnergy(type: EnergyType) {
+    if (buildingDeck.length >= 60) return;
+    const energyCard = BASIC_ENERGY_CARDS.find(e => e.types[0] === type);
+    if (energyCard) setBuildingDeck(prev => [...prev, energyCard]);
+  }
+  function removeEnergy(type: EnergyType) {
+    const energyCard = BASIC_ENERGY_CARDS.find(e => e.types[0] === type);
+    if (!energyCard) return;
+    const idx = buildingDeck.map(c => c.id).lastIndexOf(energyCard.id);
+    if (idx >= 0) setBuildingDeck(prev => { const a = [...prev]; a.splice(idx, 1); return a; });
+  }
+
+  // Unique pool cards for display
+  const poolCards = openedCards.filter((card, i, arr) => arr.findIndex(c => c.id === card.id) === i);
+  const nonEnergyPool = poolCards.filter(c => c.supertype !== 'Energy');
+
+  // Count energy in deck by type
+  const energyInDeck: Partial<Record<EnergyType, number>> = {};
+  for (const c of buildingDeck) {
+    if (c.supertype === 'Energy' && c.types[0]) {
+      const t = c.types[0] as EnergyType;
+      energyInDeck[t] = (energyInDeck[t] ?? 0) + 1;
+    }
+  }
+
+  // Deck summary for display
+  const deckByName: Record<string, { card: CardData; count: number }> = {};
+  for (const c of buildingDeck) {
+    if (!deckByName[c.id]) deckByName[c.id] = { card: c, count: 0 };
+    deckByName[c.id].count++;
+  }
+  const deckEntries = Object.values(deckByName);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-4">
-      <div className="max-w-md mx-auto space-y-4 pt-4">
-        <h1 className="text-xl font-black text-yellow-400">Your Sealed Deck</h1>
-        <div className="bg-gray-800 rounded-xl p-4 space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-gray-400">Pokémon</span><span className="font-bold">{pokemon.length}</span></div>
-          <div className="flex justify-between"><span className="text-gray-400">Trainers</span><span className="font-bold">{trainers.length}</span></div>
-          <div className="flex justify-between"><span className="text-gray-400">Energy</span><span className="font-bold">{energy.length}</span></div>
-          <div className="flex justify-between border-t border-gray-700 pt-2 mt-2"><span className="text-gray-400">Total</span><span className="font-bold">{deck.length}</span></div>
+    <div className="min-h-screen bg-gray-950 text-white p-3">
+      <div className="max-w-5xl mx-auto space-y-4">
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-black text-yellow-400">{activeSet} Prerelease — Build Deck</h1>
+          <div className="flex items-center gap-3">
+            <span className={`text-sm font-bold ${deckCount >= 40 ? 'text-green-400' : deckCount >= 20 ? 'text-yellow-400' : 'text-gray-400'}`}>
+              {deckCount} / 40 cards
+            </span>
+            <button
+              onClick={startBattle}
+              disabled={!canStart}
+              className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-bold rounded-xl"
+            >
+              ⚔️ Start Battle
+            </button>
+          </div>
         </div>
-        <div className="grid grid-cols-5 gap-1.5">
-          {pokemon.map((card, i) => <CardImage key={i} card={card} small />)}
+
+        {!canStart && (
+          <p className="text-xs text-gray-500">
+            {!deckHasBasic ? '⚠ Add at least 1 Basic Pokémon. ' : ''}
+            {deckCount < 20 ? `⚠ Add ${20 - deckCount} more cards (min 20 to battle).` : ''}
+          </p>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+          {/* Left: Pool + Energy */}
+          <div className="lg:col-span-2 space-y-4">
+
+            {/* Basic Energy */}
+            <div className="bg-gray-800 rounded-xl p-3">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Basic Energy (unlimited)</h2>
+              <div className="flex flex-wrap gap-2">
+                {ALL_ENERGY_TYPES.map(type => {
+                  const count = energyInDeck[type] ?? 0;
+                  const colorClass = ENERGY_COLORS[type] ?? 'bg-gray-600 hover:bg-gray-500';
+                  return (
+                    <div key={type} className="flex items-center gap-1">
+                      <button
+                        onClick={() => addEnergy(type)}
+                        disabled={deckCount >= 60}
+                        className={`px-2 py-1 rounded-lg text-xs font-bold text-white disabled:opacity-40 ${colorClass}`}
+                      >
+                        + {type}
+                      </button>
+                      {count > 0 && (
+                        <>
+                          <span className="text-xs text-gray-300 font-bold">×{count}</span>
+                          <button
+                            onClick={() => removeEnergy(type)}
+                            className="text-xs text-gray-500 hover:text-red-400 px-1"
+                          >
+                            −
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Pool Cards */}
+            <div className="bg-gray-800 rounded-xl p-3">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                Your Pool ({openedCards.filter(c => c.supertype !== 'Energy').length} cards)
+              </h2>
+              <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 gap-1.5">
+                {nonEnergyPool.map(card => {
+                  const inDeck = countInDeck(card);
+                  const inPool = countInPool(card);
+                  const maxed = inDeck >= inPool;
+                  return (
+                    <div key={card.id} className="relative">
+                      <button
+                        onClick={() => !maxed ? addCardToDeck(card) : removeCardFromDeck(card)}
+                        className={`w-full relative ${maxed ? 'opacity-40' : 'hover:ring-2 hover:ring-yellow-400'} rounded-lg overflow-hidden`}
+                        title={maxed ? `${card.name} (all copies in deck)` : `Add ${card.name}`}
+                      >
+                        <CardImage card={card} small />
+                      </button>
+                      {inDeck > 0 && (
+                        <div className="absolute top-0.5 right-0.5 bg-yellow-500 text-black text-[10px] font-black rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                          {inDeck}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Deck List */}
+          <div className="bg-gray-800 rounded-xl p-3">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+              Your Deck ({deckCount} cards)
+            </h2>
+            {/* Progress bar */}
+            <div className="w-full bg-gray-700 rounded-full h-1.5 mb-3">
+              <div
+                className={`h-1.5 rounded-full transition-all ${deckCount >= 40 ? 'bg-green-500' : 'bg-yellow-500'}`}
+                style={{ width: `${Math.min(100, (deckCount / 40) * 100)}%` }}
+              />
+            </div>
+            <div className="space-y-0.5 max-h-[60vh] overflow-y-auto pr-1">
+              {deckEntries.length === 0 && (
+                <p className="text-xs text-gray-600 text-center py-4">Click pool cards or energy buttons to add</p>
+              )}
+              {deckEntries
+                .sort((a, b) => {
+                  // Sort: Pokémon first, then Trainers, then Energy
+                  const order = { 'Pokémon': 0, 'Trainer': 1, 'Energy': 2 };
+                  const ao = order[a.card.supertype as keyof typeof order] ?? 3;
+                  const bo = order[b.card.supertype as keyof typeof order] ?? 3;
+                  if (ao !== bo) return ao - bo;
+                  return a.card.name.localeCompare(b.card.name);
+                })
+                .map(({ card, count }) => (
+                  <div key={card.id} className="flex items-center justify-between bg-gray-700/50 rounded px-2 py-1">
+                    <span className="text-xs truncate flex-1">{card.name}</span>
+                    <div className="flex items-center gap-1 ml-1">
+                      <span className="text-xs text-gray-400 font-bold">×{count}</span>
+                      <button
+                        onClick={() => removeCardFromDeck(card)}
+                        className="text-gray-500 hover:text-red-400 text-xs w-4 h-4 flex items-center justify-center"
+                        title="Remove one"
+                      >
+                        −
+                      </button>
+                      <button
+                        onClick={() => addCardToDeck(card)}
+                        className="text-gray-500 hover:text-green-400 text-xs w-4 h-4 flex items-center justify-center"
+                        title="Add one more"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+            <button
+              onClick={startBattle}
+              disabled={!canStart}
+              className="w-full mt-3 py-2.5 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-bold rounded-xl"
+            >
+              ⚔️ Start Battle
+            </button>
+            <Link href="/" className="block text-center text-xs text-gray-600 hover:text-white mt-2">← Home</Link>
+          </div>
         </div>
-        <button
-          onClick={startBattle}
-          className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-lg"
-        >
-          ⚔️ Start Prerelease Battle
-        </button>
-        <Link href="/" className="block text-center text-sm text-gray-500 hover:text-white">← Home</Link>
       </div>
     </div>
   );

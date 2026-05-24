@@ -312,6 +312,36 @@ export const STARTER_DECKS: StarterDeck[] = [
     ],
   },
 
+  {
+    id: 'jungle-psych-out',
+    name: 'Psych Out',
+    description: 'Jungle/Base hybrid. Wigglytuff and the Squirtle line control the field while Jynx and Abra deal Psychic damage.',
+    type: 'Water/Psychic',
+    requiredSet: 'Jungle',
+    prerequisiteSet: 'Base',
+    cardIds: [
+      ...r('base2-16', 1), // Wigglytuff
+      ...r('base2-54', 3), // Jigglypuff
+      ...r('base1-31', 2), // Jynx
+      ...r('base1-49', 2), // Drowzee
+      ...r('base1-32', 1), // Kadabra
+      ...r('base1-43', 3), // Abra
+      ...r('base1-42', 1), // Wartortle
+      ...r('base1-63', 4), // Squirtle
+      ...r('base1-41', 1), // Seel
+      ...r('base1-64', 1), // Starmie
+      ...r('base1-65', 3), // Staryu
+      ...r('base1-71', 1), // Computer Search
+      ...r(SUPER_POT,  1), // Super Potion
+      ...r(POTION,     1), // Potion
+      ...r(SWITCH,     2), // Switch
+      ...r('base1-80', 2), // Defender
+      ...r(GOW,        3), // Gust of Wind
+      ...r(E_WATER,   15), // Water Energy
+      ...r(E_PSYCHIC, 13), // Psychic Energy
+    ],
+  },
+
   // ── FOSSIL THEME DECKS (unlock: Jungle 75%) ───────────────────────────────
   {
     id: 'fossil-bodyguard',

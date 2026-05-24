@@ -69,11 +69,10 @@ export const STARTER_DECKS: StarterDeck[] = [
     requiredSet: 'Base',
     prerequisiteSet: null,
     cardIds: [
-      // Pokémon (24)
+      // Pokémon (23)
       ...r('base1-47', 3), // Diglett
       ...r('base1-52', 4), // Machop
       ...r('base1-34', 2), // Machoke
-      ...r('base1-8',  1), // Machamp
       ...r('base1-60', 4), // Ponyta
       ...r('base1-46', 4), // Charmander
       ...r('base1-24', 2), // Charmeleon

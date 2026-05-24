@@ -49,6 +49,8 @@ function persistDismiss(id: string) {
   } catch {}
 }
 
+const LAST_DECK_KEY = 'pokemon-tcg-last-deck';
+
 interface LocalDeck { name: string; cardIds: string[]; }
 
 function loadLocalDecks(): LocalDeck[] {
@@ -107,11 +109,21 @@ export default function HomePage() {
   useEffect(() => {
     const saved = loadLocalDecks();
     setLocalDecks(saved);
-    if (!user && saved[0]) { setP1Deck(saved[0].name); setP2Deck(saved[0].name); }
+    if (!user && saved.length > 0) {
+      const lastDeck = localStorage.getItem(LAST_DECK_KEY);
+      const target = (lastDeck && saved.find(d => d.name === lastDeck)) ? lastDeck : saved[0].name;
+      setP1Deck(target);
+      setP2Deck(target);
+    }
   }, []);
 
   useEffect(() => {
-    if (user && cloudDecks[0]) { setP1Deck(cloudDecks[0].name); setP2Deck(cloudDecks[0].name); }
+    if (user && cloudDecks.length > 0) {
+      const lastDeck = localStorage.getItem(LAST_DECK_KEY);
+      const target = (lastDeck && cloudDecks.find(d => d.name === lastDeck)) ? lastDeck : cloudDecks[0].name;
+      setP1Deck(target);
+      setP2Deck(target);
+    }
     if (user && profile?.display_name) setP1Name(profile.display_name);
   }, [user, cloudDecks, profile]);
 
@@ -136,6 +148,7 @@ export default function HomePage() {
       p2NameFinal = p2Name;
     }
 
+    localStorage.setItem(LAST_DECK_KEY, p1Deck);
     startGame(p1Name, cards1, p2NameFinal, cards2, mode);
     router.push('/game');
   }

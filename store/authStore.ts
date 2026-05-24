@@ -635,18 +635,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       } catch {}
     }
 
-    // Fists & Fire — give cards to collection + save deck
+    // Fists & Fire — only starter deck given on new profile (60 cards, no Machamp)
     const fistsFire = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
     if (fistsFire) {
       get().addToCollection(fistsFire.cardIds.filter(id => !id.startsWith('basic-')));
       saveDeckLocally(fistsFire.name, fistsFire.cardIds);
-    }
-
-    // Machamp Theme Deck — give cards to collection + save deck
-    const machampDeck = STARTER_DECKS.find(d => d.id === 'starter-machamp');
-    if (machampDeck) {
-      get().addToCollection(machampDeck.cardIds.filter(id => !id.startsWith('basic-')));
-      saveDeckLocally(machampDeck.name, machampDeck.cardIds);
     }
 
     // 3 unopened Base Set packs (shown in onboarding step 2)

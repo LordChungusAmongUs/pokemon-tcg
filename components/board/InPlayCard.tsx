@@ -119,45 +119,25 @@ export default function InPlayCard({ pokemon, onClick, selected, isActive, small
         )}
       </div>
 
-      {/* Energy stack (mini cards, same visual pattern as evolution stack) */}
-      {pokemon.attachedEnergy.length > 0 && (() => {
-        const energies = pokemon.attachedEnergy;
-        const eDepth = energies.length - 1;
-        const eTotalW = eCardW + eDepth * eStackOff;
-        const eTotalH = eCardH + eDepth * eStackOff;
-        return (
-          <div className="relative" style={{ width: eTotalW, height: eTotalH }}>
-            {energies.map((e, idx) => {
-              const imgSrc = ENERGY_IMAGE_MAP[e.type];
-              return (
-                <div
-                  key={e.uid}
-                  title={e.type}
-                  className={`absolute rounded overflow-hidden shadow border border-white/20
-                    ${!imgSrc ? (TYPE_BG[e.type] || 'bg-gray-600') : ''}`}
-                  style={{
-                    width: eCardW, height: eCardH,
-                    top: (eDepth - idx) * eStackOff,
-                    left: (eDepth - idx) * eStackOff,
-                    zIndex: idx,
-                  }}
-                >
-                  {imgSrc ? (
-                    <Image src={imgSrc} alt={e.type} fill className="object-cover" unoptimized sizes={`${eCardW}px`} />
-                  ) : (
-                    <span
-                      className="flex items-center justify-center w-full h-full text-white font-bold"
-                      style={{ fontSize: eCardW * 0.4 }}
-                    >
-                      {TYPE_TEXT[e.type] ?? '?'}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        );
-      })()}
+      {/* Energy pips — compact colored dots instead of mini card stacks */}
+      {pokemon.attachedEnergy.length > 0 && (
+        <div className="flex flex-wrap gap-0.5 justify-center" style={{ maxWidth: containerW }}>
+          {pokemon.attachedEnergy.map(e => {
+            const imgSrc = ENERGY_IMAGE_MAP[e.type];
+            return imgSrc ? (
+              <div key={e.uid} title={e.type}
+                className="relative w-4 h-4 rounded-full overflow-hidden shadow border border-white/30">
+                <Image src={imgSrc} alt={e.type} fill className="object-cover" unoptimized sizes="16px" />
+              </div>
+            ) : (
+              <div key={e.uid} title={e.type}
+                className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white shadow ${TYPE_BG[e.type] || 'bg-gray-600'}`}>
+                {TYPE_TEXT[e.type] ?? '?'}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

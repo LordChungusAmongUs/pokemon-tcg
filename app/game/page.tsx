@@ -1546,31 +1546,30 @@ export default function GamePage() {
       </div>
 
       {/* ── Hand ─────────────────────────────────────────────── */}
-      <div className="flex-none bg-black/50 px-2 pt-1 pb-safe-2" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
+      <div className="flex-none bg-black/50 px-2 pt-0.5 overflow-hidden" style={{ paddingBottom: 'max(4px, env(safe-area-inset-bottom))' }}>
         {selectedCard && (
-          <p className="text-[10px] text-yellow-300 mb-0.5 leading-tight">
+          <p className="text-[10px] text-yellow-300 mb-0.5 leading-none truncate">
             {selectedCard.card.name}: {
-              isBasicSelected ? 'tap empty bench slot' :
-              isEnergySelected ? 'tap a Pokémon to attach' :
-              isEvoSelected ? `tap ${selectedCard.card.evolvesFrom} to evolve` : ''
+              isBasicSelected ? 'tap bench slot' :
+              isEnergySelected ? 'tap a Pokémon' :
+              isEvoSelected ? `tap ${selectedCard.card.evolvesFrom}` : ''
             }
           </p>
         )}
-        <div className="flex gap-1 overflow-x-auto pb-1" style={{ WebkitOverflowScrolling: 'touch' }}>
-          {displayedHandPlayer.hand.map(c => (
-            <div key={c.uid} className="flex-shrink-0 flex flex-col items-center gap-0.5">
+        {/* Cards overlap when > 7 to stay on-screen */}
+        <div className="flex overflow-x-auto overflow-y-hidden" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+          {displayedHandPlayer.hand.map((c, idx) => (
+            <div
+              key={c.uid}
+              className="flex-shrink-0"
+              style={{ marginLeft: idx === 0 ? 0 : displayedHandPlayer.hand.length > 7 ? '-12px' : '2px', zIndex: idx }}
+            >
               <CardImage
                 card={c.card}
                 small
                 selected={selectedHandUid === c.uid}
                 onClick={() => isP1Turn ? setPreview({ source: 'hand', uid: c.uid, card: c.card }) : undefined}
               />
-              <span
-                className="text-[9px] text-gray-400 text-center max-w-14 truncate leading-tight cursor-pointer hover:text-white"
-                onContextMenu={e => { e.preventDefault(); setDetailCard(c.card); }}
-              >
-                {c.card.name}
-              </span>
             </div>
           ))}
           {displayedHandPlayer.hand.length === 0 && (

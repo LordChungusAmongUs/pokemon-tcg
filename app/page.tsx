@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useGameStore } from '@/store/gameStore';
 import type { CardData } from '@/engine/GameState';
@@ -13,6 +13,42 @@ import CardImage from '@/components/cards/CardImage';
 
 const BROWSE_CARDS = [...ALL_CARDS, ...BASIC_ENERGY_CARDS];
 
+// ── Notification helpers ──────────────────────────────────────────────────────
+interface Notif { id: string; emoji: string; text: string; href: string; dismissible: boolean; }
+
+function collectionPct(setName: string, coll: Record<string, number>): number {
+  const cards = ALL_CARDS.filter(c => c.set === setName && c.supertype !== 'Energy');
+  if (!cards.length) return 0;
+  return cards.filter(c => (coll[c.id] ?? 0) > 0).length / cards.length;
+}
+
+const SET_NOTIFS = [
+  { name: 'Jungle',        prereq: 'Base Set',      pct: 0.75 },
+  { name: 'Fossil',        prereq: 'Jungle',         pct: 0.75 },
+  { name: 'Team Rocket',   prereq: 'Fossil',         pct: 0.75 },
+  { name: 'Gym Heroes',    prereq: 'Team Rocket',    pct: 0.75 },
+  { name: 'Gym Challenge', prereq: 'Gym Heroes',     pct: 0.75 },
+];
+
+const DECK_NOTIFS = [
+  { label: 'Jungle theme decks',       prereq: 'Base Set',    pct: 0.75 },
+  { label: 'Fossil theme decks',       prereq: 'Jungle',      pct: 0.75 },
+  { label: 'Base Set 2 theme decks',   prereq: 'Base Set',    pct: 1.00 },
+  { label: 'Team Rocket theme decks',  prereq: 'Fossil',      pct: 0.75 },
+  { label: 'Gym Heroes theme decks',   prereq: 'Gym Heroes',  pct: 0.75 },
+  { label: 'Gym Challenge theme decks',prereq: 'Gym Challenge',pct: 0.75 },
+];
+
+function loadSeenNotifs(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem('pokemon-tcg-seen-notifs') ?? '[]')); } catch { return new Set(); }
+}
+function persistDismiss(id: string) {
+  try {
+    const seen = loadSeenNotifs(); seen.add(id);
+    localStorage.setItem('pokemon-tcg-seen-notifs', JSON.stringify([...seen]));
+  } catch {}
+}
+
 interface LocalDeck { name: string; cardIds: string[]; }
 
 function loadLocalDecks(): LocalDeck[] {
@@ -24,7 +60,37 @@ function deckToCards(deck: LocalDeck): CardData[] {
 }
 
 export default function HomePage() {
-  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount, prereleaseInvites, freeVouchers, collection, pendingLevelUp, dismissLevelUp, onboardingStep, onboardingPromoCardId, advanceOnboarding } = useAuthStore();
+  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount, prereleaseInvites, freeVouchers, collection, pendingLevelUp, dismissLevelUp, onboardingStep, onboardingPromoCardId, advanceOnboarding, unopenedPacks } = useAuthStore();
+  const [seenNotifs, setSeenNotifs] = useState<Set<string>>(new Set());
+  useEffect(() => { setSeenNotifs(loadSeenNotifs()); }, []);
+
+  const notifs = useMemo<Notif[]>(() => {
+    const out: Notif[] = [];
+    // Always-show (auto-clear when resolved)
+    if (unopenedPacks.length > 0)
+      out.push({ id: 'packs', emoji: '📦', text: `${unopenedPacks.length} booster pack${unopenedPacks.length > 1 ? 's' : ''} waiting to open!`, href: '/shop', dismissible: false });
+    if (freeVouchers.length > 0)
+      out.push({ id: 'vouchers', emoji: '🎟', text: `${freeVouchers.length} free deck voucher${freeVouchers.length > 1 ? 's' : ''} ready to redeem!`, href: '/shop', dismissible: false });
+    if (prereleaseInvites.length > 0)
+      out.push({ id: 'prerelease', emoji: '🎮', text: `${prereleaseInvites.length} prerelease event${prereleaseInvites.length > 1 ? 's' : ''} available!`, href: '/prerelease', dismissible: false });
+    // Dismissible unlock notifications
+    for (const s of SET_NOTIFS) {
+      if (!seenNotifs.has(`set:${s.name}`) && collectionPct(s.prereq, collection) >= s.pct)
+        out.push({ id: `set:${s.name}`, emoji: '✨', text: `${s.name} booster packs now in Shop!`, href: '/shop', dismissible: true });
+    }
+    for (const g of DECK_NOTIFS) {
+      if (!seenNotifs.has(`decks:${g.label}`) && collectionPct(g.prereq, collection) >= g.pct)
+        out.push({ id: `decks:${g.label}`, emoji: '🃏', text: `${g.label} now available in Shop!`, href: '/shop', dismissible: true });
+    }
+    return out.filter(n => !n.dismissible || !seenNotifs.has(n.id));
+  }, [collection, unopenedPacks, freeVouchers, prereleaseInvites, seenNotifs]);
+
+  function dismissNotif(id: string) {
+    persistDismiss(id);
+    setSeenNotifs(prev => new Set([...prev, id]));
+  }
+
+  const shopBadge = notifs.filter(n => n.href === '/shop').length;
   const [localDecks, setLocalDecks] = useState<LocalDeck[]>([]);
   const [p1Deck, setP1Deck] = useState('');
   const [p2Deck, setP2Deck] = useState('');
@@ -185,9 +251,22 @@ export default function HomePage() {
       <div className="max-w-md w-full space-y-6 text-white">
         {/* Title + auth */}
         <div className="text-center space-y-1">
-          <h1 className="text-4xl font-black tracking-tight">
-            <span className="text-yellow-400">Pokemon</span> TCG
-          </h1>
+          <div className="flex items-center justify-center gap-3">
+            <h1 className="text-4xl font-black tracking-tight">
+              <span className="text-yellow-400">Pokemon</span> TCG
+            </h1>
+            <button
+              onClick={() => {
+                if (!document.fullscreenElement) {
+                  document.documentElement.requestFullscreen?.();
+                } else {
+                  document.exitFullscreen?.();
+                }
+              }}
+              className="text-gray-500 hover:text-yellow-400 transition-colors text-xl"
+              title="Toggle Fullscreen"
+            >⛶</button>
+          </div>
           <p className="text-gray-400 text-sm">Old School Simulator</p>
           {user ? (() => {
             const { level, xpIntoLevel, xpForNext } = computeLevel(profile?.xp ?? 0);
@@ -222,6 +301,25 @@ export default function HomePage() {
           )}
         </div>
 
+        {/* ── What's New panel ── */}
+        {notifs.length > 0 && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-3 space-y-2">
+            <p className="text-xs text-yellow-400 font-bold uppercase tracking-widest">🔔 What's New</p>
+            {notifs.map(n => (
+              <div key={n.id} className="flex items-center gap-2">
+                <Link href={n.href} className="flex-1 flex items-center gap-2 text-sm text-white hover:text-yellow-300 transition-colors">
+                  <span>{n.emoji}</span>
+                  <span>{n.text}</span>
+                </Link>
+                {n.dismissible && (
+                  <button onClick={() => dismissNotif(n.id)}
+                    className="flex-none text-gray-500 hover:text-white text-lg leading-none px-1">×</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Quick links */}
         <div className="grid grid-cols-2 gap-3">
           <Link href="/collection" className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all">
@@ -234,7 +332,12 @@ export default function HomePage() {
             <div className="font-semibold mt-1">Deck Builder</div>
             <div className="text-xs text-gray-400">{allDecks.length} saved decks</div>
           </Link>
-          <Link href="/shop" className="bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all">
+          <Link href="/shop" className="relative bg-white/10 hover:bg-white/20 rounded-2xl p-4 text-center transition-all">
+            {shopBadge > 0 && (
+              <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {shopBadge}
+              </span>
+            )}
             <div className="text-3xl">🏪</div>
             <div className="font-semibold mt-1">Shop</div>
             <div className="text-xs text-yellow-400">{user ? `${profile?.credits ?? 0} credits` : 'Sign in to buy'}</div>

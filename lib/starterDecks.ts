@@ -373,30 +373,29 @@ export const STARTER_DECKS: StarterDeck[] = [
   {
     id: 'bs2-grass-chopper',
     name: 'Grass Chopper',
-    description: 'Base Set 2 reprints. Venusaur, Beedrill, and Exeggutor overwhelm with relentless Grass energy.',
-    type: 'Grass',
+    description: 'Fighting/Grass beatdown. Machop line and Sandshrew grind opponents down; Nidoran lines and Bellsprout add Grass pressure.',
+    type: 'Fighting/Grass',
     requiredSet: 'Base',
     prerequisiteSet: 'Base',
     prerequisitePct: 1.0,
     cardIds: [
-      ...r('base4-67', 4), // Bulbasaur
-      ...r('base4-44', 2), // Ivysaur
-      ...r('base4-18', 1), // Venusaur
-      ...r('base4-100',4), // Weedle
-      ...r('base4-47', 2), // Kakuna
-      ...r('base4-21', 1), // Beedrill
-      ...r('base4-74', 4), // Exeggcute
-      ...r('base4-39', 2), // Exeggutor
-      ...r('base4-96', 4), // Tangela
-      ...r(BS2_BILL,   2),
-      ...r(BS2_OAK,    2),
-      ...r(BS2_POTION, 2),
-      ...r(BS2_GOW,    1),
-      ...r(BS2_EREM,   1),
-      ...r(BS2_PPLUS,  1),
-      ...r(BS2_SWITCH, 1),
-      ...r(E_GRASS,   22),
-      ...r(BS2_DCE,    4),
+      ...r('base4-6',  1), // Clefairy
+      ...r('base4-83', 2), // Nidoran ♂
+      ...r('base4-54', 1), // Nidorino
+      ...r('base4-82', 3), // Nidoran ♀
+      ...r('base4-64', 2), // Weepinbell
+      ...r('base4-66', 4), // Bellsprout
+      ...r('base4-91', 4), // Sandshrew
+      ...r('base4-49', 2), // Machoke
+      ...r('base4-78', 4), // Machop
+      ...r(BS2_EREM,   1), // Energy Removal
+      ...r('base4-108',1), // Super Energy Removal
+      ...r('base4-117',1), // Super Potion
+      ...r(BS2_PPLUS,  2), // PlusPower
+      ...r(BS2_GOW,    1), // Gust of Wind
+      ...r(BS2_POTION, 3), // Potion
+      ...r(E_FIGHTING,14), // Fighting Energy
+      ...r(E_GRASS,   14), // Grass Energy
     ],
   },
   {

@@ -341,6 +341,34 @@ export const STARTER_DECKS: StarterDeck[] = [
     ],
   },
 
+  {
+    id: 'fossil-lockdown',
+    name: 'Lockdown',
+    description: 'Fossil/Base hybrid. Lapras and the Krabby line wall opponents while Magmar and Ponyta bring the heat.',
+    type: 'Water/Fire',
+    requiredSet: 'Fossil',
+    prerequisiteSet: 'Jungle',
+    cardIds: [
+      ...r('base3-10', 1), // Lapras
+      ...r('base3-39', 2), // Magmar (Fossil)
+      ...r('base3-49', 4), // Horsea
+      ...r('base3-42', 2), // Seadra
+      ...r('base3-51', 4), // Krabby
+      ...r('base3-38', 2), // Kingler
+      ...r('base1-68', 3), // Vulpix
+      ...r('base1-60', 3), // Ponyta
+      ...r('base3-60', 1), // Gambler
+      ...r('base3-59', 1), // Energy Search
+      ...r(BILL,         2), // Bill
+      ...r(SWITCH,       2), // Switch
+      ...r(POTION,       2), // Potion
+      ...r('base1-90',   2), // Super Potion
+      ...r('base1-82',   1), // Full Heal
+      ...r(E_FIRE,      14), // Fire Energy
+      ...r(E_WATER,     14), // Water Energy
+    ],
+  },
+
   // ── BASE SET 2 THEME DECKS (unlock: Base 100%) ───────────────────────────
   {
     id: 'bs2-grass-chopper',

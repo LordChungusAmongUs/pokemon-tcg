@@ -552,7 +552,7 @@ export const STARTER_DECKS: StarterDeck[] = [
     prerequisiteSet: 'Fossil',
     cardIds: [
       ...r('base5-2',  1), // Dark Arbok (holo)
-      ...r('base5-56', 2), // Ekans (Rocket)
+      ...r('base5-56', 4), // Ekans (Rocket)
       ...r('base5-62', 2), // Meowth (Rocket)
       ...r('base1-27', 2), // Farfetch'd
       ...r('base1-69', 2), // Weedle
@@ -563,12 +563,13 @@ export const STARTER_DECKS: StarterDeck[] = [
       ...r('base1-49', 3), // Drowzee
       ...r('base1-31', 1), // Jynx
       ...r('base1-29', 1), // Haunter
+      ...r('base1-50', 2), // Gastly
       ...r(SWITCH,       1), // Switch
       ...r(POTION,       2), // Potion
       ...r(GOW,          1), // Gust of Wind
       ...r('base5-73',   1), // The Boss's Way
       ...r(BILL,         1), // Bill
-      ...r('base5-81',   1), // Full Heal Energy
+      ...r('base5-81',   1), // Full Heal Energy (Energy card)
       ...r(E_GRASS,     10), // Grass Energy
       ...r(E_PSYCHIC,   18), // Psychic Energy
     ],

@@ -234,27 +234,27 @@ export const STARTER_DECKS: StarterDeck[] = [
   {
     id: 'jungle-power-reserve',
     name: 'Power Reserve',
-    description: 'Official WotC Jungle theme deck. Scyther, Snorlax, and Kangaskhan are unstoppable walls.',
-    type: 'Grass/Colorless',
+    description: 'Jungle/Base hybrid. Kangaskhan and the Nidoran♀ line hit hard; Abra/Kadabra provide Psychic support.',
+    type: 'Grass/Psychic',
     requiredSet: 'Jungle',
     prerequisiteSet: 'Base',
     cardIds: [
-      ...r('base2-10', 4), // Scyther
-      ...r('base2-11', 2), // Snorlax
-      ...r('base2-5',  3), // Kangaskhan
-      ...r('base2-9',  2), // Pinsir
-      ...r('base2-54', 4), // Jigglypuff
-      ...r('base2-16', 2), // Wigglytuff
-      ...r('base2-63', 3), // Venonat
-      ...r('base2-13', 1), // Venomoth
-      ...r(BILL,         2),
-      ...r(OAK,          2),
-      ...r(POTION,       3),
-      ...r(SWITCH,       2),
-      ...r(GOW,          2),
-      ...r(POKEBALL_J,   2),
-      ...r(E_GRASS,     22),
-      ...r(DCE,          4),
+      ...r('base2-21', 1), // Kangaskhan
+      ...r('base2-58', 2), // Oddish
+      ...r('base2-57', 4), // Nidoran ♀
+      ...r('base2-48', 2), // Weepinbell
+      ...r('base2-40', 2), // Nidorina
+      ...r('base2-37', 1), // Gloom
+      ...r('base1-43', 4), // Abra
+      ...r('base1-32', 2), // Kadabra
+      ...r('base1-31', 1), // Jynx
+      ...r('base1-95', 1), // Switch
+      ...r('base1-94', 3), // Potion
+      ...r('base1-93', 2), // Gust of Wind
+      ...r('base1-91', 2), // Bill
+      ...r('base1-87', 2), // Pokédex
+      ...r(E_PSYCHIC,  11), // Psychic Energy
+      ...r(E_GRASS,    17), // Grass Energy
     ],
   },
   {

@@ -666,20 +666,25 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     saveOnboarding(storageId, { step: null, promoCardId: null });
     try { localStorage.removeItem(starterGivenKey(storageId)); } catch {}
     try { localStorage.removeItem(`pokemon-tcg-milestones-${storageId}`); } catch {}
+    // Clear all saved decklists and last-deck preference
+    try { localStorage.removeItem('pokemon-tcg-decks'); } catch {}
+    try { localStorage.removeItem('pokemon-tcg-last-deck'); } catch {}
 
     if (isLocalGuest) {
       const reset: Profile = { ...makeGuestProfile(), display_name: profile?.display_name ?? 'Trainer' };
       saveLocalGuest(reset);
-      set({ profile: reset, collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [], unopenedPacks: {}, onboardingStep: null, onboardingPromoCardId: null });
+      set({ profile: reset, collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [], decks: [], unopenedPacks: {}, onboardingStep: null, onboardingPromoCardId: null });
       get().ensureStarterDeck();
       return;
     }
 
     const supabase = createClient();
+    // Delete all cloud-saved decks for this account
+    await supabase.from('decks').delete().eq('user_id', user.id);
     await supabase.from('profiles').update({
       xp: 0, level: 1, credits: STARTING_CREDITS, wins: 0, losses: 0, elo: 1000,
     }).eq('id', user.id);
-    set({ collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [], unopenedPacks: {}, onboardingStep: null, onboardingPromoCardId: null });
+    set({ collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [], decks: [], unopenedPacks: {}, onboardingStep: null, onboardingPromoCardId: null });
     await get().refreshProfile();
     get().ensureStarterDeck();
   },

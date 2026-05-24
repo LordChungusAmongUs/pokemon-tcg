@@ -4,10 +4,20 @@ import { SET_PROGRESSION } from '@/lib/progression';
 
 export const ALL_CARDS: CardData[] = cardsData as CardData[];
 
+// The 6 basic energy types supported by this simulator (Base Set era)
 export const BASIC_ENERGY_TYPES: EnergyType[] = [
   'Fire', 'Water', 'Grass', 'Lightning', 'Psychic', 'Fighting',
-  'Darkness', 'Metal', 'Colorless',
 ];
+
+// Local paths for Base Set energy sprites (downloaded from pokemontcg.io/base1)
+const BASIC_ENERGY_IMAGE: Record<string, string> = {
+  Fire:      '/cards/Energy/FireEnergy.png',
+  Water:     '/cards/Energy/WaterEnergy.png',
+  Grass:     '/cards/Energy/GrassEnergy.png',
+  Lightning: '/cards/Energy/LightningEnergy.png',
+  Psychic:   '/cards/Energy/PsychicEnergy.png',
+  Fighting:  '/cards/Energy/FightingEnergy.png',
+};
 
 export const BASIC_ENERGY_CARDS: CardData[] = BASIC_ENERGY_TYPES.map(type => ({
   id: `basic-energy-${type.toLowerCase()}`,
@@ -27,7 +37,7 @@ export const BASIC_ENERGY_CARDS: CardData[] = BASIC_ENERGY_TYPES.map(type => ({
   resistances: [],
   retreatCost: [],
   rules: [],
-  localImagePath: null,
+  localImagePath: BASIC_ENERGY_IMAGE[type] ?? null,
   apiImageUrl: null,
 }));
 

@@ -12,17 +12,14 @@ import type { CardData, EnergyType } from '@/engine/GameState';
 
 const BROWSE_CARDS = [...ALL_CARDS, ...BASIC_ENERGY_CARDS];
 
-const ALL_ENERGY_TYPES: EnergyType[] = ['Fire', 'Water', 'Grass', 'Lightning', 'Psychic', 'Fighting', 'Colorless', 'Darkness', 'Metal'];
-const ENERGY_COLORS: Record<EnergyType, string> = {
-  Fire: 'bg-red-600 hover:bg-red-500',
-  Water: 'bg-blue-600 hover:bg-blue-500',
-  Grass: 'bg-green-600 hover:bg-green-500',
+const ALL_ENERGY_TYPES: EnergyType[] = ['Fire', 'Water', 'Grass', 'Lightning', 'Psychic', 'Fighting'];
+const ENERGY_COLORS: Partial<Record<EnergyType, string>> = {
+  Fire:      'bg-red-600 hover:bg-red-500',
+  Water:     'bg-blue-600 hover:bg-blue-500',
+  Grass:     'bg-green-600 hover:bg-green-500',
   Lightning: 'bg-yellow-500 hover:bg-yellow-400 text-black',
-  Psychic: 'bg-purple-600 hover:bg-purple-500',
-  Fighting: 'bg-orange-700 hover:bg-orange-600',
-  Colorless: 'bg-gray-500 hover:bg-gray-400',
-  Darkness: 'bg-gray-800 hover:bg-gray-700 border border-gray-600',
-  Metal: 'bg-slate-500 hover:bg-slate-400',
+  Psychic:   'bg-purple-600 hover:bg-purple-500',
+  Fighting:  'bg-orange-700 hover:bg-orange-600',
 };
 
 export default function PrereleasePage() {

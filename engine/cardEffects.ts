@@ -62,6 +62,7 @@ export interface AttackEffects {
   coinMsg: string;
   cantAttackSelf: boolean; // Leer: if heads, defender can't attack attacker next turn
   selfHeal: number;        // remove this many damage from attacker if damage was dealt (Leech Seed = 10)
+  applySnivel: boolean;    // Cubone Snivel: defender's next attack vs attacker deals 20 less
 }
 
 export function computeAttackEffects(
@@ -91,6 +92,7 @@ export function computeAttackEffects(
     coinMsg: '',
     cantAttackSelf: false,
     selfHeal: 0,
+    applySnivel: false,
   };
 
   const cardId = attackerPokemon.card.id;
@@ -290,6 +292,12 @@ export function computeAttackEffects(
   // "remove 1 damage counter from [attacker]" — not "from the Defending Pokémon"
   if (/remove\s+(?:1|a)\s+damage counter(?!\s+from (?:the\s+)?defending)/i.test(text)) {
     res.selfHeal = 10;
+  }
+
+  // ── Snivel (Cubone) ───────────────────────────────────────────────────────
+  if (atk.name === 'Snivel') {
+    res.applySnivel = true;
+    res.defenderStatus = null;
   }
 
   return res;

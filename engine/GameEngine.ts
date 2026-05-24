@@ -599,6 +599,27 @@ export function attack(state: GameState, attackIndex: number): GameState {
     || isPassivePowerOn(defender.active, 'Shield Dust', state);
   const blockDefEffects = isPassivePowerOn(defender.active, 'Shield Dust', state);
 
+  // ── Snivel damage reduction ──────────────────────────────────────────────
+  // Applied AFTER W/R. Clears after one attack (or if either Pokémon was benched).
+  let snivel = state.snivel;
+  if (snivel && snivel.protectedUid === defender.active.uid && snivel.attackerUid === attacker.active.uid) {
+    const reduced = Math.max(0, damage - 20);
+    if (damage > 0) {
+      preventionMsgs.push(`🛡 Snivel reduces damage by ${damage - reduced}!`);
+      damage = reduced;
+    }
+    snivel = undefined; // consumed
+  } else if (snivel) {
+    // Either Pokémon switched out — clear it
+    const allUids = [
+      state[active].active?.uid, ...state[active].bench.map(b => b?.uid),
+      state[opponent].active?.uid, ...state[opponent].bench.map(b => b?.uid),
+    ];
+    if (!allUids.includes(snivel.protectedUid) || !allUids.includes(snivel.attackerUid)) {
+      snivel = undefined;
+    }
+  }
+
   // ── Build log message ────────────────────────────────────────────────────
   let msg = `${attacker.active.card.name} uses ${atk.name}`;
   if (damage > 0) msg += ` for ${damage} damage`;
@@ -803,6 +824,17 @@ export function attack(state: GameState, attackIndex: number): GameState {
   // ── Leer — set cantAttackTarget on game state ────────────────────────────
   if (fx.cantAttackSelf && attacker.active && defender.active) {
     next = { ...next, cantAttackTarget: { attackerUid: defender.active.uid, targetUid: attacker.active.uid } };
+  }
+
+  // ── Snivel — set protection on game state (defender's next attack deals -20) ─
+  if (fx.applySnivel && attacker.active && defender.active) {
+    next = log(
+      { ...next, snivel: { protectedUid: attacker.active.uid, attackerUid: defender.active.uid } },
+      `🛡 ${attacker.active.card.name} uses Snivel! ${defender.active.card.name}'s next attack deals 20 less damage!`,
+    );
+  } else {
+    // Propagate any cleared snivel state
+    next = { ...next, snivel };
   }
 
   // ── Resolve KOs ──────────────────────────────────────────────────────────

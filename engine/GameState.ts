@@ -134,6 +134,7 @@ export interface GameState {
   mode: 'vs-ai' | 'local-2p';
   usedPowersThisTurn: string[];  // "${uid}:${powerName}" for once-per-turn powers
   cantAttackTarget?: { attackerUid: string; targetUid: string }; // Leer-type: attacker can't attack targetUid
+  snivel?: { protectedUid: string; attackerUid: string }; // Cubone Snivel: next opponent attack against protectedUid deals -20
 }
 
 export interface SelectedDeck {

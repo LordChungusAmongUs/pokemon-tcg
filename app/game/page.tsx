@@ -15,7 +15,7 @@ import { runAITurn } from '@/ai/SimpleAI';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
 
-const AFK_TIMEOUT = 10;
+const AFK_TIMEOUT = 30;
 const AFK_WARNING_AT = 3;
 
 // Discriminated union for the bottom-sheet preview context
@@ -51,6 +51,7 @@ export default function GamePage() {
   const { awardGameResult, addEncountered, addToCollection, pendingLevelUp, dismissLevelUp } = useAuthStore();
   const [promoWon, setPromoWon] = useState<CardData | null>(null);
   const [passModal, setPassModal] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
   const [rewarded, setRewarded] = useState(false);
   const [setupActiveUid, setSetupActiveUid] = useState<string | null>(null);
@@ -577,6 +578,30 @@ export default function GamePage() {
               className="w-full py-3 bg-yellow-500 rounded-xl font-bold text-black hover:bg-yellow-400">
               I'm {activePlayer.name} — Ready!
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Full battle log modal */}
+      {logOpen && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 flex-none">
+            <p className="text-white font-bold text-base">📋 Battle Log</p>
+            <button onClick={() => setLogOpen(false)}
+              className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium">
+              Close
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-1 text-sm">
+            {game.log.map((entry, i) => (
+              <div key={i} className={
+                entry.startsWith('---')
+                  ? 'text-yellow-400 font-semibold border-t border-gray-700 pt-1 mt-1'
+                  : 'text-gray-300'
+              }>
+                {entry}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1360,7 +1385,13 @@ export default function GamePage() {
         <div className="flex-none text-[10px] text-gray-400 whitespace-nowrap">
           {isP1Turn ? `${p1.name}'s turn` : `${p2.name}'s turn`}
         </div>
-        <GameLog entries={game.log.slice(-3)} className="flex-1 text-[10px]" />
+        <button className="flex-1 text-left min-w-0" onClick={() => setLogOpen(true)}>
+          <GameLog entries={game.log.slice(-3)} className="text-[10px]" />
+        </button>
+        <button onClick={() => setLogOpen(true)}
+          className="flex-none text-[10px] text-gray-500 hover:text-yellow-300 px-1 py-0.5 rounded whitespace-nowrap">
+          📋 Log
+        </button>
       </div>
 
       {/* ── AI action acknowledgement banner ─────────────────── */}

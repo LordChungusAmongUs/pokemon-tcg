@@ -193,6 +193,19 @@ export function computeAttackEffects(
     return res;
   }
 
+  // ── Rampage (Tauros) — +10 per own damage counter; flip coin, tails = self Confused ─
+  if (atk.name === 'Rampage') {
+    const selfCounters = Math.floor(attackerPokemon.damageTaken / 10);
+    res.bonusDamage += 10 * selfCounters;
+    const heads = flip();
+    if (!heads) res.selfStatus = 'Confused';
+    res.coinMsg = heads
+      ? `Heads! Rampage deals ${res.rawDamage + res.bonusDamage} damage.`
+      : `Tails! Tauros is now Confused!`;
+    res.defenderStatus = null;
+    return res;
+  }
+
   // ── Standard single-coin attacks ─────────────────────────────────────────
   const hasCoin = /flip a coin/i.test(text);
 

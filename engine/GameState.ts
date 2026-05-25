@@ -135,6 +135,7 @@ export interface GameState {
   pendingCoinFlip: boolean;
   pendingTrainer?: PendingTrainer;
   pendingRetreat?: { benchSlot: number; cost: number };
+  pendingAttackDiscard?: { attackIndex: number; requiredType: EnergyType; count: number };
   mode: 'vs-ai' | 'local-2p';
   usedPowersThisTurn: string[];  // "${uid}:${powerName}" for once-per-turn powers
   cantAttackTarget?: { attackerUid: string; targetUid: string }; // Leer-type: attacker can't attack targetUid

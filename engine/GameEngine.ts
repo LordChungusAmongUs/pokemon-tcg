@@ -517,7 +517,19 @@ function resolveKO(
 
 export function flipCoin(): boolean { return flip(); }
 
-export function attack(state: GameState, attackIndex: number): GameState {
+// Detects "Discard N [Type] Energy" in attack text — returns type+count or null.
+// Used to intercept and show a picker before the attack resolves.
+function getTypedDiscardRequirement(atk: CardAttack): { type: EnergyType; count: number } | null {
+  const m = atk.text?.match(
+    /discard\s+(\d+)\s+(fire|water|grass|lightning|psychic|fighting|darkness|metal|dragon|fairy)\s+energy/i,
+  );
+  if (!m) return null;
+  const type = (m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase()) as EnergyType;
+  return { count: parseInt(m[1]), type };
+}
+
+// skipTypedDiscard=true means the energy discard was already paid by resolveAttackDiscard
+export function attack(state: GameState, attackIndex: number, skipTypedDiscard = false): GameState {
   const active = state.activePlayer;
   const opponent = active === 'player1' ? 'player2' : 'player1';
   const attacker = state[active];
@@ -595,6 +607,18 @@ export function attack(state: GameState, attackIndex: number): GameState {
     } else {
       // Pokémon swapped out — clear the effect
       state = { ...state, sandAttackTarget: undefined };
+    }
+  }
+
+  // ── Typed energy discard check (Ember, Flamethrower, Fire Spin…) ────────
+  // Intercept before computing effects — show player a picker to confirm which
+  // specific Fire (or other typed) energy to discard for the attack.
+  if (!skipTypedDiscard) {
+    const typedDiscard = getTypedDiscardRequirement(atk);
+    if (typedDiscard) {
+      const matching = attacker.active.attachedEnergy.filter(e => e.type === typedDiscard.type);
+      if (matching.length < typedDiscard.count) return state; // not enough (shouldn't reach here)
+      return { ...state, pendingAttackDiscard: { attackIndex, requiredType: typedDiscard.type, count: typedDiscard.count } };
     }
   }
 
@@ -763,12 +787,15 @@ export function attack(state: GameState, attackIndex: number): GameState {
   }
 
   // ── Discard attacker's energy ────────────────────────────────────────────
-  if (fx.discardAllAttackerEnergy || fx.discardAttackerEnergy > 0) {
+  // When skipTypedDiscard=true, the typed energy was already removed by resolveAttackDiscard —
+  // skip the generic discard (fx.discardAttackerEnergy) to avoid double-discarding.
+  const effectiveDiscardCount = skipTypedDiscard ? 0 : fx.discardAttackerEnergy;
+  if (fx.discardAllAttackerEnergy || effectiveDiscardCount > 0) {
     const p = next[active];
     if (p.active) {
       const count = fx.discardAllAttackerEnergy
         ? p.active.attachedEnergy.length
-        : Math.min(fx.discardAttackerEnergy, p.active.attachedEnergy.length);
+        : Math.min(effectiveDiscardCount, p.active.attachedEnergy.length);
       const discarded = p.active.attachedEnergy.slice(-count);
       const remaining = p.active.attachedEnergy.slice(0, p.active.attachedEnergy.length - count);
       const discardCards = discarded.map(e => fakeEnergyCard(e.type, e.cardId));
@@ -953,6 +980,43 @@ export function endTurn(state: GameState): GameState {
   }
 
   return checkWinConditions(next);
+}
+
+// ─── Attack energy discard resolution ────────────────────────────────────────
+// Called after the player picks which typed energy to discard for Ember etc.
+// Removes those energies, then executes the attack (with skipTypedDiscard=true).
+
+export function resolveAttackDiscard(state: GameState, energyUids: string[]): GameState {
+  const pending = state.pendingAttackDiscard;
+  if (!pending) return state;
+  const active = state.activePlayer;
+  const player = state[active];
+  if (!player.active) return { ...state, pendingAttackDiscard: undefined };
+
+  const selected = player.active.attachedEnergy.filter(e => energyUids.includes(e.uid));
+  if (selected.length !== pending.count) return state;
+  if (!selected.every(e => e.type === pending.requiredType)) return state;
+
+  const remaining = player.active.attachedEnergy.filter(e => !energyUids.includes(e.uid));
+  const discardCards = selected.map(e => fakeEnergyCard(e.type, e.cardId));
+  const atkName = player.active.card.attacks[pending.attackIndex]?.name ?? 'attack';
+
+  let next: GameState = log({
+    ...state,
+    pendingAttackDiscard: undefined,
+    [active]: {
+      ...player,
+      active: { ...player.active, attachedEnergy: remaining },
+      discard: [...player.discard, ...discardCards],
+    },
+  }, `${player.name} discards ${pending.count} ${pending.requiredType} Energy for ${atkName}.`);
+
+  // Now run the attack — skip the typed discard intercept since it's already paid
+  return attack(next, pending.attackIndex, true);
+}
+
+export function cancelAttackDiscard(state: GameState): GameState {
+  return { ...state, pendingAttackDiscard: undefined };
 }
 
 // ─── trainer card ─────────────────────────────────────────────────────────────

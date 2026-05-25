@@ -38,12 +38,14 @@ export default function GamePage() {
     damageSwapAction, gengarCurseAction, buzzapAction, resolvePokedexAction, resolvePokeballAction,
     resolvePokemonTraderAction, resolveMaintenanceAction, resolveItemFinderAction, resolveComputerSearchAction, resolveNightlyGarbageRunAction,
     resolvePokemonBreederAction, resolveRecycleAction, confirmRetreatAction,
+    resolveAttackDiscardAction, cancelAttackDiscardAction,
   } = useGameStore();
 
   const [detailCard, setDetailCard] = useState<CardData | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [pokedexOrder, setPokedexOrder] = useState<string[]>([]);
   const [retreatEnergySelected, setRetreatEnergySelected] = useState<string[]>([]);
+  const [attackDiscardSelected, setAttackDiscardSelected] = useState<string[]>([]);
   const [powerModal, setPowerModal] = useState<{
     type: 'energy-trans' | 'damage-swap' | 'gengar-curse' | 'buzzap';
     step: string;
@@ -1292,6 +1294,63 @@ export default function GamePage() {
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl">
                 Confirm ({selectedValue}/{cost})
               </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Attack energy discard (Ember / Flamethrower / Fire Spin…) ─── */}
+      {game.pendingAttackDiscard && (() => {
+        const { requiredType, count, attackIndex } = game.pendingAttackDiscard;
+        const atkName = p1.active?.card.attacks[attackIndex]?.name ?? 'Attack';
+        const energies = (p1.active?.attachedEnergy ?? []).filter(e => e.type === requiredType);
+        const selectedValue = attackDiscardSelected.length;
+        return (
+          <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-900 rounded-2xl p-5 max-w-sm w-full space-y-3">
+              <h3 className="font-bold text-orange-400 text-center">🔥 {atkName} — Discard Cost</h3>
+              <p className="text-sm text-gray-400 text-center">
+                Choose {count} {requiredType} Energy to discard:
+              </p>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {energies.map(e => {
+                  const isSelected = attackDiscardSelected.includes(e.uid);
+                  return (
+                    <button key={e.uid}
+                      onClick={() => setAttackDiscardSelected(prev =>
+                        isSelected
+                          ? prev.filter(u => u !== e.uid)
+                          : prev.length < count ? [...prev, e.uid] : prev
+                      )}
+                      className={`px-3 py-2 rounded-xl text-sm font-medium transition-all border-2 ${
+                        isSelected
+                          ? 'bg-orange-600 border-orange-400 text-white'
+                          : 'bg-gray-800 border-gray-600 text-gray-300 hover:border-orange-500'
+                      }`}>
+                      {requiredType} Energy
+                    </button>
+                  );
+                })}
+                {energies.length === 0 && (
+                  <p className="text-red-400 text-sm">No {requiredType} Energy attached!</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { cancelAttackDiscardAction(); setAttackDiscardSelected([]); }}
+                  className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl">
+                  Cancel
+                </button>
+                <button
+                  disabled={selectedValue < count}
+                  onClick={() => {
+                    resolveAttackDiscardAction(attackDiscardSelected);
+                    setAttackDiscardSelected([]);
+                  }}
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl">
+                  Confirm ({selectedValue}/{count})
+                </button>
+              </div>
             </div>
           </div>
         );

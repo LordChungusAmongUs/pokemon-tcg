@@ -2,6 +2,7 @@ import type { GameState, PlayerState, InPlayPokemon } from '@/engine/GameState';
 import {
   playBasicToBench, attachEnergy, attack, endTurn,
   doDrawPhase, playTrainer, retreat, resolvePendingTrainer, confirmRetreat,
+  resolveAttackDiscard,
 } from '@/engine/GameEngine';
 import { canPayCost, isBasicPokemon, isTrainer } from '@/lib/cardUtils';
 
@@ -142,6 +143,18 @@ export async function runAITurn(
     const bestAtk = findBestAttack(state.player2.active);
     if (bestAtk >= 0) {
       state = attack(state, bestAtk);
+      // Auto-resolve typed energy discard (e.g. Ember needs 1 Fire Energy confirmed)
+      if (state.pendingAttackDiscard) {
+        const { requiredType, count } = state.pendingAttackDiscard;
+        const matching = state.player2.active?.attachedEnergy
+          .filter(e => e.type === requiredType)
+          .slice(0, count) ?? [];
+        if (matching.length >= count) {
+          state = resolveAttackDiscard(state, matching.map(e => e.uid));
+        } else {
+          state = { ...state, pendingAttackDiscard: undefined }; // can't pay, skip
+        }
+      }
       setState(state);
       await ack(state);
       if (state.phase === 'gameover') return;

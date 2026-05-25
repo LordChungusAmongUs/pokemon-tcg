@@ -10,6 +10,7 @@ import {
   useDamageSwap, useGengarCurse, useBuzzap,
   resolvePokemonTrader, resolveMaintenance, resolveItemFinder, resolveNightlyGarbageRun,
   resolvePokemonBreeder, resolveRecycle, confirmRetreat, resolveComputerSearch,
+  resolveAttackDiscard, cancelAttackDiscard,
 } from '@/engine/GameEngine';
 import type { EnergyType } from '@/engine/GameState';
 import { XP_REWARDS } from '@/lib/progression';
@@ -64,6 +65,8 @@ interface GameStore {
   resolvePokemonBreederAction: (uid: string) => void;
   resolveRecycleAction: (uid: string) => void;
   confirmRetreatAction: (energyUids: string[]) => void;
+  resolveAttackDiscardAction: (energyUids: string[]) => void;
+  cancelAttackDiscardAction: () => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -113,6 +116,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   attackAction: (attackIndex) => set(s => {
     if (!s.game) return { game: null, selectedHandUid: null };
     const afterAttack = attack(s.game, attackIndex);
+    // If a typed energy discard is needed (e.g. Ember), wait for player to confirm
+    if (afterAttack.pendingAttackDiscard) return { game: afterAttack, selectedHandUid: null };
     const final = afterAttack.phase !== 'gameover' ? endTurn(afterAttack) : afterAttack;
     return { game: final, selectedHandUid: null };
   }),
@@ -198,5 +203,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
   })),
   confirmRetreatAction: (energyUids) => set(s => ({
     game: s.game ? confirmRetreat(s.game, energyUids) : null,
+  })),
+
+  resolveAttackDiscardAction: (energyUids) => set(s => {
+    if (!s.game) return {};
+    const afterDiscard = resolveAttackDiscard(s.game, energyUids);
+    // resolveAttackDiscard executes the full attack — now end the turn
+    if (afterDiscard.pendingAttackDiscard) return { game: afterDiscard }; // shouldn't happen
+    const final = afterDiscard.phase !== 'gameover' ? endTurn(afterDiscard) : afterDiscard;
+    return { game: final, selectedHandUid: null };
+  }),
+
+  cancelAttackDiscardAction: () => set(s => ({
+    game: s.game ? cancelAttackDiscard(s.game) : null,
   })),
 }));

@@ -350,14 +350,13 @@ export function attachEnergy(
 
   if (player.energyPlayedThisTurn && !isRainDanceAttach) return state;
 
-  // Double Colorless Energy (base1-96) provides 2 Colorless energy instances
+  // Double Colorless Energy (base1-96) — ONE card that provides 2 Colorless.
+  // Stored as a single EnergyInstance with provides:2 so Energy Removal treats it
+  // as one card and retreat/cost checks count it as 2 energy symbols.
   const isDCE = energyCard.card.id === 'base1-96' ||
     energyCard.card.name.toLowerCase().includes('double colorless');
   const energyInstances: EnergyInstance[] = isDCE
-    ? [
-        { uid: makeUID(), type: 'Colorless', cardId: energyCard.card.id },
-        { uid: makeUID(), type: 'Colorless', cardId: energyCard.card.id },
-      ]
+    ? [{ uid: makeUID(), type: 'Colorless', cardId: energyCard.card.id, provides: 2 }]
     : [{ uid: makeUID(), type: energyType, cardId: energyCard.card.id }];
 
   const attachTo = (pokemon: InPlayPokemon | null): InPlayPokemon | null => {
@@ -407,8 +406,9 @@ export function retreat(state: GameState, benchSlot: number): GameState {
 
   const dodrioReduction = player.bench.filter(b => b !== null && isActivePowerOn(b, 'Retreat Aid', state)).length;
   const cost = Math.max(0, player.active.card.retreatCost.length - dodrioReduction);
-  const totalEnergy = player.active.attachedEnergy.length;
-  if (totalEnergy < cost) return state;
+  // DCE counts as 2 energy symbols — sum 'provides' values (default 1 per card)
+  const totalEnergyValue = player.active.attachedEnergy.reduce((s, e) => s + (e.provides ?? 1), 0);
+  if (totalEnergyValue < cost) return state;
 
   const swapTo = player.bench[benchSlot];
   if (!swapTo) return state;
@@ -426,7 +426,9 @@ export function confirmRetreat(state: GameState, energyUids: string[]): GameStat
   const player = state[state.activePlayer];
   if (!player.active) return state;
   const selected = player.active.attachedEnergy.filter(e => energyUids.includes(e.uid));
-  if (selected.length !== cost) return state;
+  // DCE provides 2 — compare sum of provides values, not instance count
+  const selectedValue = selected.reduce((s, e) => s + (e.provides ?? 1), 0);
+  if (selectedValue < cost) return state;
   return applyRetreat({ ...state, pendingRetreat: undefined }, benchSlot, energyUids);
 }
 

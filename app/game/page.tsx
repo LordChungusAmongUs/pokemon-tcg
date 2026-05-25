@@ -292,8 +292,10 @@ export default function GamePage() {
   const isEvoSelected    = selectedCard?.card.evolvesFrom != null;
   const dodrioReduction = p1.bench.filter(b => b !== null && isActivePowerOn(b, 'Retreat Aid', game)).length;
   const effectiveRetreatCost = Math.max(0, (p1.active?.card.retreatCost.length ?? 0) - dodrioReduction);
+  // DCE has provides:2 — sum provides values to get total energy available for retreat
+  const p1ActiveEnergyValue = (p1.active?.attachedEnergy ?? []).reduce((s, e) => s + (e.provides ?? 1), 0);
   const canRetreat = isP1Turn && !p1.retreatedThisTurn && !!p1.active &&
-    p1.active.attachedEnergy.length >= effectiveRetreatCost &&
+    p1ActiveEnergyValue >= effectiveRetreatCost &&
     p1.bench.some(b => b !== null);
 
   function handleP1BenchClick(slot: number) {
@@ -736,7 +738,7 @@ export default function GamePage() {
                   className="w-full flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-red-800 rounded-xl text-sm text-white">
                   <CardImage card={p2.active.card} small />
                   <span className="font-bold">{p2.active.card.name}</span>
-                  <span className="text-gray-400 ml-auto">{p2.active.attachedEnergy.length} energy</span>
+                  <span className="text-gray-400 ml-auto">{p2.active.attachedEnergy.reduce((s,e)=>s+(e.provides??1),0)} energy</span>
                 </button>
               )}
               {p2.bench.map((b, i) => b && b.attachedEnergy.length > 0 ? (
@@ -744,7 +746,7 @@ export default function GamePage() {
                   className="w-full flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-red-800 rounded-xl text-sm text-white">
                   <CardImage card={b.card} small />
                   <span className="font-bold">{b.card.name}</span>
-                  <span className="text-gray-400 ml-auto">{b.attachedEnergy.length} energy</span>
+                  <span className="text-gray-400 ml-auto">{b.attachedEnergy.reduce((s,e)=>s+(e.provides??1),0)} energy</span>
                 </button>
               ) : null)}
             </div>
@@ -765,7 +767,7 @@ export default function GamePage() {
                 {target.attachedEnergy.map((e, i) => (
                   <button key={e.uid} onClick={() => resolveTrainerAction(i)}
                     className="px-3 py-2 bg-gray-700 hover:bg-red-700 rounded-xl text-sm font-bold text-white">
-                    {e.type} Energy
+                    {(e.provides ?? 1) === 2 ? 'DCE (2×⬜)' : `${e.type} Energy`}
                   </button>
                 ))}
               </div>
@@ -778,14 +780,14 @@ export default function GamePage() {
         <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 rounded-2xl p-5 max-w-xs w-full space-y-3">
             <h3 className="font-bold text-yellow-400 text-center">Super Energy Removal</h3>
-            <p className="text-sm text-gray-400 text-center">Choose target (removes 2 energy):</p>
+            <p className="text-sm text-gray-400 text-center">Choose target (removes up to 2 energy cards):</p>
             <div className="space-y-2">
               {p2.active && p2.active.attachedEnergy.length > 0 && (
                 <button onClick={() => resolveTrainerAction(-1)}
                   className="w-full flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-red-800 rounded-xl text-sm text-white">
                   <CardImage card={p2.active.card} small />
                   <span className="font-bold">{p2.active.card.name}</span>
-                  <span className="text-gray-400 ml-auto">{p2.active.attachedEnergy.length} energy</span>
+                  <span className="text-gray-400 ml-auto">{p2.active.attachedEnergy.reduce((s,e)=>s+(e.provides??1),0)} energy</span>
                 </button>
               )}
               {p2.bench.map((b, i) => b && b.attachedEnergy.length > 0 ? (
@@ -793,7 +795,7 @@ export default function GamePage() {
                   className="w-full flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-red-800 rounded-xl text-sm text-white">
                   <CardImage card={b.card} small />
                   <span className="font-bold">{b.card.name}</span>
-                  <span className="text-gray-400 ml-auto">{b.attachedEnergy.length} energy</span>
+                  <span className="text-gray-400 ml-auto">{b.attachedEnergy.reduce((s,e)=>s+(e.provides??1),0)} energy</span>
                 </button>
               ) : null)}
             </div>
@@ -1245,37 +1247,50 @@ export default function GamePage() {
       {game.pendingRetreat && (() => {
         const { cost } = game.pendingRetreat;
         const energies = p1.active?.attachedEnergy ?? [];
+        // DCE counts as 2 — track total value of selected energy, not count
+        const selectedValue = retreatEnergySelected.reduce((sum, uid) => {
+          const e = energies.find(e => e.uid === uid);
+          return sum + (e?.provides ?? 1);
+        }, 0);
         return (
           <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
             <div className="bg-gray-900 rounded-2xl p-5 max-w-sm w-full space-y-3">
               <h3 className="font-bold text-blue-400 text-center">Retreat — Pay Cost</h3>
               <p className="text-sm text-gray-400 text-center">
-                Choose {cost} energ{cost === 1 ? 'y' : 'ies'} to discard:
+                Discard energy worth {cost} ⬜ to retreat:
               </p>
               <div className="flex flex-wrap gap-2 justify-center">
                 {energies.map(e => {
                   const isSelected = retreatEnergySelected.includes(e.uid);
+                  const isDCE = (e.provides ?? 1) === 2;
+                  const label = isDCE ? 'DCE (2×⬜)' : `${e.type} Energy`;
                   return (
                     <button key={e.uid}
-                      onClick={() => setRetreatEnergySelected(prev =>
-                        isSelected ? prev.filter(u => u !== e.uid)
-                          : prev.length < cost ? [...prev, e.uid] : prev
-                      )}
+                      onClick={() => setRetreatEnergySelected(prev => {
+                        if (isSelected) return prev.filter(u => u !== e.uid);
+                        // Allow adding if current total hasn't reached cost yet
+                        const curVal = prev.reduce((s, u) => {
+                          const en = energies.find(en => en.uid === u);
+                          return s + (en?.provides ?? 1);
+                        }, 0);
+                        if (curVal >= cost) return prev; // already covered
+                        return [...prev, e.uid];
+                      })}
                       className={`px-3 py-2 rounded-xl text-sm font-medium transition-all border-2 ${
                         isSelected
                           ? 'bg-blue-600 border-blue-400 text-white'
                           : 'bg-gray-800 border-gray-600 text-gray-300 hover:border-blue-500'
-                      }`}>
-                      {e.type} Energy
+                      }${isDCE ? ' border-yellow-500' : ''}`}>
+                      {label}
                     </button>
                   );
                 })}
               </div>
               <button
-                disabled={retreatEnergySelected.length !== cost}
+                disabled={selectedValue < cost}
                 onClick={() => { confirmRetreatAction(retreatEnergySelected); setRetreatEnergySelected([]); }}
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl">
-                Confirm ({retreatEnergySelected.length}/{cost})
+                Confirm ({selectedValue}/{cost})
               </button>
             </div>
           </div>

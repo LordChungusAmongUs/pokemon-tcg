@@ -125,15 +125,18 @@ export function isBasicEnergy(card: CardData): boolean {
 export function totalEnergy(energies: EnergyInstance[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const e of energies) {
-    counts[e.type] = (counts[e.type] || 0) + 1;
-    counts['Colorless'] = (counts['Colorless'] || 0) + 1;
+    const count = e.provides ?? 1;
+    counts[e.type] = (counts[e.type] || 0) + count;
+    counts['Colorless'] = (counts['Colorless'] || 0) + count;
   }
   return counts;
 }
 
 export function canPayCost(cost: EnergyType[], attached: EnergyInstance[]): boolean {
+  // DCE has provides:2 — each instance contributes that many energy symbols of its type
   const have = attached.reduce((acc, e) => {
-    acc[e.type] = (acc[e.type] || 0) + 1;
+    const count = e.provides ?? 1;
+    acc[e.type] = (acc[e.type] || 0) + count;
     return acc;
   }, {} as Record<string, number>);
 

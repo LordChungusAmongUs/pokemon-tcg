@@ -123,6 +123,15 @@ export default function InPlayCard({ pokemon, onClick, selected, isActive, small
       {pokemon.attachedEnergy.length > 0 && (
         <div className="flex flex-wrap gap-0.5 justify-center" style={{ maxWidth: containerW }}>
           {pokemon.attachedEnergy.map(e => {
+            // DCE = 1 card providing 2 Colorless — show as a single gold-outlined pill
+            if ((e.provides ?? 1) === 2) {
+              return (
+                <div key={e.uid} title="Double Colorless Energy"
+                  className="px-1 h-4 rounded-full flex items-center justify-center text-[7px] font-bold text-gray-900 shadow border border-yellow-400 bg-gray-200 leading-none whitespace-nowrap">
+                  2C
+                </div>
+              );
+            }
             const imgSrc = ENERGY_IMAGE_MAP[e.type];
             return imgSrc ? (
               <div key={e.uid} title={e.type}

@@ -60,6 +60,7 @@ export interface EnergyInstance {
   uid: string;
   type: EnergyType;
   cardId: string;        // "basic-fire", etc.
+  provides?: number;     // energy symbols this card provides (default 1; DCE = 2)
 }
 
 export interface InPlayPokemon {

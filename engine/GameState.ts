@@ -137,6 +137,7 @@ export interface GameState {
   mode: 'vs-ai' | 'local-2p';
   usedPowersThisTurn: string[];  // "${uid}:${powerName}" for once-per-turn powers
   cantAttackTarget?: { attackerUid: string; targetUid: string }; // Leer-type: attacker can't attack targetUid
+  sandAttackTarget?: string; // Sand Attack: UID of Pokémon with sand in its eyes; must flip coin to attack
   snivel?: { protectedUid: string; attackerUid: string }; // Cubone Snivel: next opponent attack against protectedUid deals -20
 }
 

@@ -70,9 +70,10 @@ export interface AttackEffects {
   selfStatus: StatusCondition | null; // apply to ATTACKER
   drawCards: number;
   coinMsg: string;
-  cantAttackSelf: boolean; // Leer: if heads, defender can't attack attacker next turn
-  selfHeal: number;        // remove this many damage from attacker if damage was dealt (Leech Seed = 10)
-  applySnivel: boolean;    // Cubone Snivel: defender's next attack vs attacker deals 20 less
+  cantAttackSelf: boolean;   // Leer: if heads, defender can't attack attacker next turn
+  sandAttackSelf: boolean;   // Sand Attack: defender must flip coin to attack next turn (tails = fails)
+  selfHeal: number;          // remove this many damage from attacker if damage was dealt (Leech Seed = 10)
+  applySnivel: boolean;      // Cubone Snivel: defender's next attack vs attacker deals 20 less
 }
 
 export function computeAttackEffects(
@@ -101,6 +102,7 @@ export function computeAttackEffects(
     drawCards: 0,
     coinMsg: '',
     cantAttackSelf: false,
+    sandAttackSelf: false,
     selfHeal: 0,
     applySnivel: false,
   };
@@ -181,6 +183,13 @@ export function computeAttackEffects(
     } else {
       res.coinMsg = 'Tails! Leer has no effect.';
     }
+    return res;
+  }
+
+  // ── Sand Attack — no coin now; defender must flip coin to attack next turn ─
+  if (atk.name === 'Sand-attack' || atk.name === 'Sand Attack') {
+    res.sandAttackSelf = true;
+    // No coin flip on use — the coin flip happens when the defender tries to attack
     return res;
   }
 

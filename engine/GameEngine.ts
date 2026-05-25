@@ -576,6 +576,26 @@ export function attack(state: GameState, attackIndex: number): GameState {
     state = { ...state, cantAttackTarget: undefined };
   }
 
+  // ── Sand Attack — coin flip check ────────────────────────────────────────
+  if (state.sandAttackTarget) {
+    if (attacker.active.uid === state.sandAttackTarget) {
+      // Same Pokémon is still active — must flip a coin
+      const heads = flip();
+      state = { ...state, sandAttackTarget: undefined };
+      if (!heads) {
+        return log(
+          { ...state, [active]: { ...attacker, hasAttackedThisTurn: true } },
+          `😵 ${attacker.active.card.name} has sand in its eyes! Coin flip tails — attack fails!`,
+        );
+      }
+      // Heads — attack proceeds
+      state = log(state, `😵 ${attacker.active.card.name} has sand in its eyes! Coin flip heads — attack proceeds!`);
+    } else {
+      // Pokémon swapped out — clear the effect
+      state = { ...state, sandAttackTarget: undefined };
+    }
+  }
+
   // ── Compute all attack effects ───────────────────────────────────────────
   const attackerBenchCount = attacker.bench.filter(b => b !== null).length;
   const fx = computeAttackEffects(atk, attacker.active, defender.active, attackerBenchCount);
@@ -836,6 +856,12 @@ export function attack(state: GameState, attackIndex: number): GameState {
   // ── Leer — set cantAttackTarget on game state ────────────────────────────
   if (fx.cantAttackSelf && attacker.active && defender.active) {
     next = { ...next, cantAttackTarget: { attackerUid: defender.active.uid, targetUid: attacker.active.uid } };
+  }
+
+  // ── Sand Attack — mark defender as having sand in its eyes ───────────────
+  if (fx.sandAttackSelf && defender.active) {
+    next = log({ ...next, sandAttackTarget: defender.active.uid },
+      `💨 Sand Attack! ${defender.active.card.name} has sand in its eyes — must flip a coin to attack next turn!`);
   }
 
   // ── Snivel — set protection on game state (defender's next attack deals -20) ─

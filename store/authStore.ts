@@ -624,10 +624,18 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
     if (wasStarterGiven(storageId)) return;
 
-    // Fists & Fire cards added to collection — player builds their own deck
+    // Fists & Fire — add cards to collection AND auto-save the decklist
     const fistsFire = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
     if (fistsFire) {
       get().addToCollection(fistsFire.cardIds.filter(id => !id.startsWith('basic-')));
+      try {
+        const key = 'pokemon-tcg-decks';
+        const all: { name: string; cardIds: string[] }[] = JSON.parse(localStorage.getItem(key) || '[]');
+        if (!all.find(d => d.name === fistsFire.name)) {
+          all.push({ name: fistsFire.name, cardIds: fistsFire.cardIds });
+          localStorage.setItem(key, JSON.stringify(all));
+        }
+      } catch {}
     }
 
     // 3 unopened Base Set packs (shown in onboarding step 2)

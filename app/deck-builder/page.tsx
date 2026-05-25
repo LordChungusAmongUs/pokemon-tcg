@@ -114,7 +114,6 @@ export default function DeckBuilderPage() {
   }
 
   function addCard(card: CardData) {
-    if (deck.length >= 60) return;
     const isBasicEnergy = card.supertype === 'Energy' && card.subtype === 'Basic';
     if (!isBasicEnergy && countNameInDeck(card.name) >= 4) return; // max 4 of any name across all sets
     if (!isBasicEnergy && countInDeck(card.id) >= owned(card)) return; // can't add more than you own
@@ -129,6 +128,7 @@ export default function DeckBuilderPage() {
   }
 
   async function handleSave() {
+    if (deck.length === 0) { alert('Add some cards first!'); return; }
     const cardIds = deck.map(c => c.id);
     if (user && !isLocalGuest) {
       await saveCloudDeck(deckName, cardIds, editingDeckId);
@@ -136,7 +136,11 @@ export default function DeckBuilderPage() {
       saveLocalDeck({ name: deckName, cardIds });
       setLocalDecks(loadLocalDecks());
     }
-    alert(`Deck "${deckName}" saved!`);
+    if (deck.length !== 60) {
+      alert(`Deck "${deckName}" saved!\n\n⚠️ This deck has ${deck.length} card${deck.length !== 1 ? 's' : ''} — it needs exactly 60 to use in a match.`);
+    } else {
+      alert(`Deck "${deckName}" saved! ✅`);
+    }
   }
 
   function handleLoadCloud(d: Deck) {
@@ -182,7 +186,7 @@ export default function DeckBuilderPage() {
         const inDeckCount = countInDeck(previewCard.id);
         const nameInDeckCount = countNameInDeck(previewCard.name);
         const ownedQty = owned(previewCard);
-        const canAdd = deck.length < 60 && (isBasicEnergy || (nameInDeckCount < 4 && inDeckCount < ownedQty));
+        const canAdd = isBasicEnergy || (nameInDeckCount < 4 && inDeckCount < ownedQty);
         const canRemove = inDeckCount > 0;
         return (
           <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setPreviewCard(null)}>
@@ -285,7 +289,7 @@ export default function DeckBuilderPage() {
             const isBasicEnergy = card.supertype === 'Energy' && card.subtype === 'Basic';
             const ownedQty = owned(card);
             const nameInDeck = countNameInDeck(card.name);
-            const maxed = (!isBasicEnergy && (nameInDeck >= 4 || inDeck >= ownedQty)) || deck.length >= 60;
+            const maxed = !isBasicEnergy && (nameInDeck >= 4 || inDeck >= ownedQty);
             return (
               <div key={card.id} className="flex flex-col items-center gap-1">
                 <div className="relative">
@@ -324,13 +328,13 @@ export default function DeckBuilderPage() {
             onChange={e => setDeckName(e.target.value)}
             className="w-full bg-gray-800 rounded-lg px-3 py-2 text-sm font-bold"
           />
-          <div className="flex gap-2">
-            <span className={`text-sm font-bold ${deck.length === 60 ? 'text-green-400' : deck.length > 60 ? 'text-red-400' : 'text-gray-400'}`}>
-              {deck.length}/60
+          <div className="flex gap-2 items-center">
+            <span className={`text-sm font-bold tabular-nums ${deck.length === 60 ? 'text-green-400' : deck.length > 60 ? 'text-orange-400' : 'text-gray-400'}`}>
+              {deck.length}/60{deck.length !== 60 && deck.length > 0 ? ' ⚠️' : ''}
             </span>
             <button
               onClick={handleSave}
-              disabled={deck.length !== 60}
+              disabled={deck.length === 0}
               className="flex-1 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black text-sm font-bold rounded-lg"
             >
               Save Deck

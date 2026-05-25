@@ -131,7 +131,7 @@ export default function HomePage() {
     const d1 = allDecks.find(d => d.name === p1Deck);
     if (!d1) { alert('Select a deck for Player 1 first.'); return; }
     const cards1 = deckToCards(d1);
-    if (cards1.length < 20) { alert('Your deck needs at least 20 cards to play.'); return; }
+    if (cards1.length !== 60) { alert(`Your deck has ${cards1.length} cards — it must be exactly 60 to play.\n\nEdit it in the Deck Builder first.`); return; }
 
     let cards2: CardData[];
     let p2NameFinal: string;
@@ -144,7 +144,7 @@ export default function HomePage() {
       const d2 = allDecks.find(d => d.name === p2Deck);
       if (!d2) { alert('Select a deck for Player 2 first.'); return; }
       cards2 = deckToCards(d2);
-      if (cards2.length < 20) { alert('Player 2 deck needs at least 20 cards to play.'); return; }
+      if (cards2.length !== 60) { alert(`Player 2 deck has ${cards2.length} cards — it must be exactly 60 to play.`); return; }
       p2NameFinal = p2Name;
     }
 

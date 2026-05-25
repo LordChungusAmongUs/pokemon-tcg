@@ -568,7 +568,7 @@ export function attack(state: GameState, attackIndex: number): GameState {
     // Effect still applies only if same Pokémon are still active on both sides
     if (attacker.active.uid === attackerUid && defender.active.uid === targetUid) {
       return log(
-        { ...state, [active]: { ...attacker, hasAttackedThisTurn: true } },
+        { ...state, cantAttackTarget: undefined, [active]: { ...attacker, hasAttackedThisTurn: true } },
         `${attacker.active.card.name} can't attack ${defender.active.card.name} this turn! (Leer)`,
       );
     }
@@ -915,7 +915,9 @@ export function endTurn(state: GameState): GameState {
     phase: 'draw',
     log: [...state.log, `--- ${state[opponent].name}'s turn ---`],
     usedPowersThisTurn: [],
-    cantAttackTarget: undefined,
+    // Note: cantAttackTarget intentionally NOT cleared here — it must survive into
+    // the opponent's turn so the "can't attack" block can fire. It clears itself
+    // when it triggers, or when either Pokémon swaps out.
   };
 
   if (updatedActive && isKnockedOut(updatedActive)) {

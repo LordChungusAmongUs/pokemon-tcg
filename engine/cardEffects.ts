@@ -173,6 +173,17 @@ export function computeAttackEffects(
     return res;
   }
 
+  // ── Leer — one coin; heads = defender can't attack next turn (early return) ─
+  if (atk.name === 'Leer') {
+    if (flip()) {
+      res.cantAttackSelf = true;
+      res.coinMsg = 'Heads! Defending Pokémon can\'t attack next turn!';
+    } else {
+      res.coinMsg = 'Tails! Leer has no effect.';
+    }
+    return res;
+  }
+
   // ── Standard single-coin attacks ─────────────────────────────────────────
   const hasCoin = /flip a coin/i.test(text);
 
@@ -288,15 +299,6 @@ export function computeAttackEffects(
   const drawM = text.match(/draw\s+(?:a\s+card|(\d+)\s+cards?)/i);
   if (drawM) res.drawCards = drawM[1] ? parseInt(drawM[1]) : 1;
 
-  // ── Leer — defending Pokémon can't attack attacker next turn (coin flip) ─
-  if (atk.name === 'Leer') {
-    if (flip()) {
-      res.cantAttackSelf = true;
-      res.coinMsg = (res.coinMsg ? res.coinMsg + ' ' : '') + 'Heads! Defending Pokémon can\'t attack next turn!';
-    } else {
-      res.coinMsg = (res.coinMsg ? res.coinMsg + ' ' : '') + 'Tails! Leer has no effect.';
-    }
-  }
 
   // ── Self-heal (Leech Seed, etc.) ─────────────────────────────────────────
   // "remove 1 damage counter from [attacker]" — not "from the Defending Pokémon"

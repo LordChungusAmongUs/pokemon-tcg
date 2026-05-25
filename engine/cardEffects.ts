@@ -496,23 +496,7 @@ export function handleTrainerEffect(
 
   // Maintenance — intercepted in playTrainer for player choice
 
-  // ── Computer Search ───────────────────────────────────────────────────────
-  if (name === 'computer search' || id === 'base1-71') {
-    const p = player();
-    if (p.hand.length < 2) return logMsg(after, `${playerName} can't use Computer Search — need 2 cards to discard.`);
-    if (p.deck.length === 0) return logMsg(after, `${playerName} plays Computer Search but deck is empty.`);
-    const [d1, d2, ...restHand] = p.hand;
-    // Auto-pick: prefer a Pokemon, otherwise random
-    const idx = p.deck.findIndex(c => isPokemon(c.card)) !== -1
-      ? p.deck.findIndex(c => isPokemon(c.card))
-      : Math.floor(Math.random() * p.deck.length);
-    const found = p.deck[idx];
-    const newDeck = shuffle(p.deck.filter((_, i) => i !== idx));
-    const newDiscard = [...p.discard, d1, d2];
-    after = logMsg({ ...after, [playerId]: { ...p, hand: [...restHand, found], deck: newDeck, discard: newDiscard } },
-      `${playerName} uses Computer Search and finds ${found.card.name}!`);
-    return after;
-  }
+  // Computer Search — intercepted in playTrainer for player choice
 
   // Item Finder — intercepted in playTrainer for player choice
 

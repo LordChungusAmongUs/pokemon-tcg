@@ -1022,6 +1022,14 @@ export function playTrainer(state: GameState, handUid: string): GameState {
     return { ...next, pendingTrainer: { type: 'pokemon-trader' } };
   }
 
+  // ── Computer Search: discard 2 from hand, pick any card from deck ──────────
+  if (name === 'computer search' || id === 'base1-71' || id === 'base4-101') {
+    const p = next[active];
+    if (p.hand.length < 2) return log(next, `${p.name} can't use Computer Search — need 2 cards to discard.`);
+    if (p.deck.length === 0) return log(next, `${p.name} plays Computer Search but deck is empty.`);
+    return { ...next, pendingTrainer: { type: 'computer-search' } };
+  }
+
   // ── Item Finder: player picks 2 to discard then a trainer from discard ─────
   if (name === 'item finder' || id === 'base1-74') {
     const p = next[active];
@@ -1246,6 +1254,46 @@ export function resolveItemFinder(state: GameState, uid: string): GameState {
     return log(
       { ...state, pendingTrainer: undefined, [active]: { ...player, hand: [...restHand, trainerCard], discard: newDiscard } },
       `${player.name} uses Item Finder to recover ${trainerCard.card.name}!`,
+    );
+  }
+
+  return { ...state, pendingTrainer: undefined };
+}
+
+// ─── Computer Search resolution ──────────────────────────────────────────────
+
+export function resolveComputerSearch(state: GameState, uid: string): GameState {
+  const pending = state.pendingTrainer;
+  const active = state.activePlayer;
+  const player = state[active];
+
+  // Step 1 — pick first card to discard from hand
+  if (pending?.type === 'computer-search') {
+    const card = player.hand.find(c => c.uid === uid);
+    if (!card) return state;
+    return { ...state, pendingTrainer: { type: 'computer-search-second', firstUid: uid } };
+  }
+
+  // Step 2 — pick second card to discard from hand
+  if (pending?.type === 'computer-search-second') {
+    if (uid === pending.firstUid) return state; // can't pick same card twice
+    const card = player.hand.find(c => c.uid === uid);
+    if (!card) return state;
+    return { ...state, pendingTrainer: { type: 'computer-search-deck', firstUid: pending.firstUid, secondUid: uid } };
+  }
+
+  // Step 3 — pick any card from deck
+  if (pending?.type === 'computer-search-deck') {
+    const first = player.hand.find(c => c.uid === pending.firstUid);
+    const second = player.hand.find(c => c.uid === pending.secondUid);
+    const deckCard = player.deck.find(c => c.uid === uid);
+    if (!first || !second || !deckCard) return { ...state, pendingTrainer: undefined };
+    const restHand = player.hand.filter(c => c.uid !== pending.firstUid && c.uid !== pending.secondUid);
+    const newDiscard = [...player.discard, first, second];
+    const newDeck = shuffle(player.deck.filter(c => c.uid !== uid));
+    return log(
+      { ...state, pendingTrainer: undefined, [active]: { ...player, hand: [...restHand, deckCard], deck: newDeck, discard: newDiscard } },
+      `${player.name} uses Computer Search and finds ${deckCard.card.name}!`,
     );
   }
 

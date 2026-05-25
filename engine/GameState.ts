@@ -117,7 +117,10 @@ export type PendingTrainer =
   | { type: 'nightly-garbage-run'; selectedUids: string[] }
   | { type: 'pokemon-breeder' }
   | { type: 'pokemon-breeder-target'; stage2Uid: string }
-  | { type: 'recycle' };
+  | { type: 'recycle' }
+  | { type: 'computer-search' }
+  | { type: 'computer-search-second'; firstUid: string }
+  | { type: 'computer-search-deck'; firstUid: string; secondUid: string };
 
 export interface GameState {
   phase: GamePhase;

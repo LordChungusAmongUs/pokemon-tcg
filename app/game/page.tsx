@@ -36,7 +36,7 @@ export default function GamePage() {
     confirmSetupAction,
     vileplumHealAction, energyBurnAction, energyTransAction,
     damageSwapAction, gengarCurseAction, buzzapAction, resolvePokedexAction, resolvePokeballAction,
-    resolvePokemonTraderAction, resolveMaintenanceAction, resolveItemFinderAction, resolveNightlyGarbageRunAction,
+    resolvePokemonTraderAction, resolveMaintenanceAction, resolveItemFinderAction, resolveComputerSearchAction, resolveNightlyGarbageRunAction,
     resolvePokemonBreederAction, resolveRecycleAction, confirmRetreatAction,
   } = useGameStore();
 
@@ -1054,6 +1054,73 @@ export default function GamePage() {
                 {trainersInDiscard.map(ci => (
                   <div key={ci.uid} className="flex flex-col items-center gap-1 cursor-pointer hover:opacity-80"
                     onClick={() => resolveItemFinderAction(ci.uid)}>
+                    <CardImage card={ci.card} small />
+                    <span className="text-[9px] text-gray-300 text-center truncate w-full">{ci.card.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Computer Search step 1: pick first card to discard ──────── */}
+      {game.pendingTrainer?.type === 'computer-search' && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 rounded-2xl p-5 max-w-lg w-full space-y-3">
+            <h3 className="font-bold text-yellow-400 text-center">💻 Computer Search</h3>
+            <p className="text-sm text-gray-400 text-center">Choose the <span className="font-bold text-white">first</span> card to discard:</p>
+            <div className="grid grid-cols-4 gap-2 max-h-72 overflow-y-auto">
+              {p1.hand.map(ci => (
+                <div key={ci.uid} className="flex flex-col items-center gap-1 cursor-pointer hover:opacity-80"
+                  onClick={() => resolveComputerSearchAction(ci.uid)}>
+                  <CardImage card={ci.card} small />
+                  <span className="text-[9px] text-gray-300 text-center truncate w-full">{ci.card.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Computer Search step 2: pick second card to discard ──────── */}
+      {game.pendingTrainer?.type === 'computer-search-second' && (() => {
+        const { firstUid } = game.pendingTrainer;
+        const firstCard = p1.hand.find(c => c.uid === firstUid);
+        const remaining = p1.hand.filter(c => c.uid !== firstUid);
+        return (
+          <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-900 rounded-2xl p-5 max-w-lg w-full space-y-3">
+              <h3 className="font-bold text-yellow-400 text-center">💻 Computer Search</h3>
+              <p className="text-sm text-gray-400 text-center">
+                Discarding <span className="font-bold text-white">{firstCard?.card.name}</span>. Choose the <span className="font-bold text-white">second</span> card to discard:
+              </p>
+              <div className="grid grid-cols-4 gap-2 max-h-72 overflow-y-auto">
+                {remaining.map(ci => (
+                  <div key={ci.uid} className="flex flex-col items-center gap-1 cursor-pointer hover:opacity-80"
+                    onClick={() => resolveComputerSearchAction(ci.uid)}>
+                    <CardImage card={ci.card} small />
+                    <span className="text-[9px] text-gray-300 text-center truncate w-full">{ci.card.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Computer Search step 3: choose any card from deck ───────── */}
+      {game.pendingTrainer?.type === 'computer-search-deck' && (() => {
+        const sortedDeck = [...p1.deck].sort((a, b) => a.card.name.localeCompare(b.card.name));
+        return (
+          <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-900 rounded-2xl p-5 max-w-lg w-full space-y-3">
+              <h3 className="font-bold text-yellow-400 text-center">💻 Computer Search</h3>
+              <p className="text-sm text-gray-400 text-center">Choose any card from your deck ({p1.deck.length} cards):</p>
+              <div className="grid grid-cols-4 gap-2 max-h-72 overflow-y-auto">
+                {sortedDeck.map(ci => (
+                  <div key={ci.uid} className="flex flex-col items-center gap-1 cursor-pointer hover:opacity-80"
+                    onClick={() => resolveComputerSearchAction(ci.uid)}>
                     <CardImage card={ci.card} small />
                     <span className="text-[9px] text-gray-300 text-center truncate w-full">{ci.card.name}</span>
                   </div>

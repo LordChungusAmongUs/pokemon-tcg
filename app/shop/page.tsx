@@ -94,11 +94,18 @@ export default function ShopPage() {
     setPackLabel(label);
   }
 
+  function deckCollectionIds(sd: typeof STARTER_DECKS[0]): string[] {
+    // Non-energy cards + one of each unique basic energy type (unlocks that type)
+    const nonEnergy = sd.cardIds.filter(id => !id.startsWith('basic-energy-'));
+    const energyTypes = [...new Set(sd.cardIds.filter(id => id.startsWith('basic-energy-')))];
+    return [...nonEnergy, ...energyTypes];
+  }
+
   async function handleBuyDeck(sd: typeof STARTER_DECKS[0]) {
     if (!user) { alert('Sign in to buy decks!'); return; }
     if (credits < THEME_DECK_COST) { alert('Not enough credits!'); return; }
     await addCredits(-THEME_DECK_COST);
-    addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
+    addToCollection(deckCollectionIds(sd));
     saveThemeDeckToBuilder(sd);
     showDeckCards(sd, `${sd.name} — Theme Deck`);
   }
@@ -106,7 +113,7 @@ export default function ShopPage() {
   function handleRedeemVoucher(sd: typeof STARTER_DECKS[0]) {
     if (!user) { alert('Sign in first!'); return; }
     redeemVoucher(freeVouchers[0]);
-    addToCollection(sd.cardIds.filter(id => !id.startsWith('basic-')));
+    addToCollection(deckCollectionIds(sd));
     saveThemeDeckToBuilder(sd);
     showDeckCards(sd, `🎟 ${sd.name} — Voucher Redeemed`);
   }

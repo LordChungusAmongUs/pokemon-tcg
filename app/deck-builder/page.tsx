@@ -85,16 +85,20 @@ export default function DeckBuilderPage() {
   const activeFormat = FORMATS.find(f => f.id === format);
   const formatSetNames = activeFormat ? new Set(activeFormat.sets) : null;
 
-  // How many of a card the player owns (basic energy is unlimited)
+  // How many of a card the player can use:
+  // Basic energy: unlimited (99) once unlocked (owned ≥ 1), otherwise 0
   function owned(card: CardData): number {
-    if (card.supertype === 'Energy' && card.subtype === 'Basic') return 99;
+    if (card.supertype === 'Energy' && card.subtype === 'Basic') {
+      return (collection[card.id] ?? 0) > 0 ? 99 : 0;
+    }
     return collection[card.id] ?? 0;
   }
 
   const filtered = useMemo(() => {
     const base = BROWSE_CARDS.filter(c => {
       const isBasicEnergy = c.supertype === 'Energy' && c.subtype === 'Basic';
-      if (!isBasicEnergy && (collection[c.id] ?? 0) === 0) return false;
+      // All cards — including basic energy — must be in the collection to show
+      if ((collection[c.id] ?? 0) === 0) return false;
       if (!isBasicEnergy && c.set && !isSetUnlocked(c.set, collection)) return false;
       if (formatSetNames && c.set && !formatSetNames.has(c.set) && !isBasicEnergy) return false;
       if (!formatSetNames && set !== 'All' && c.set !== set) return false;
@@ -115,6 +119,7 @@ export default function DeckBuilderPage() {
 
   function addCard(card: CardData) {
     const isBasicEnergy = card.supertype === 'Energy' && card.subtype === 'Basic';
+    if (owned(card) === 0) return; // must own the card (or have the energy type unlocked)
     if (!isBasicEnergy && countNameInDeck(card.name) >= 4) return; // max 4 of any name across all sets
     if (!isBasicEnergy && countInDeck(card.id) >= owned(card)) return; // can't add more than you own
     if (card.set && !isSetUnlocked(card.set, collection) && !isBasicEnergy) return;
@@ -186,7 +191,7 @@ export default function DeckBuilderPage() {
         const inDeckCount = countInDeck(previewCard.id);
         const nameInDeckCount = countNameInDeck(previewCard.name);
         const ownedQty = owned(previewCard);
-        const canAdd = isBasicEnergy || (nameInDeckCount < 4 && inDeckCount < ownedQty);
+        const canAdd = ownedQty > 0 && (isBasicEnergy || (nameInDeckCount < 4 && inDeckCount < ownedQty));
         const canRemove = inDeckCount > 0;
         return (
           <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setPreviewCard(null)}>

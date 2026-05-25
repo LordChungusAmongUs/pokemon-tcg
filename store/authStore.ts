@@ -627,7 +627,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     // Fists & Fire — add cards to collection AND auto-save the decklist
     const fistsFire = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
     if (fistsFire) {
-      get().addToCollection(fistsFire.cardIds.filter(id => !id.startsWith('basic-')));
+      // Add non-energy cards + one of each unique basic energy type in the deck
+      const nonEnergy = fistsFire.cardIds.filter(id => !id.startsWith('basic-energy-'));
+      const energyTypes = [...new Set(fistsFire.cardIds.filter(id => id.startsWith('basic-energy-')))];
+      get().addToCollection([...nonEnergy, ...energyTypes]);
       try {
         const key = 'pokemon-tcg-decks';
         const all: { name: string; cardIds: string[] }[] = JSON.parse(localStorage.getItem(key) || '[]');

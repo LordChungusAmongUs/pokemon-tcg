@@ -109,7 +109,8 @@ export default function HomePage() {
   useEffect(() => {
     const saved = loadLocalDecks();
     setLocalDecks(saved);
-    if (!user && saved.length > 0) {
+    // Apply last-deck preference for all local/guest users on mount
+    if (saved.length > 0) {
       const lastDeck = localStorage.getItem(LAST_DECK_KEY);
       const target = (lastDeck && saved.find(d => d.name === lastDeck)) ? lastDeck : saved[0].name;
       setP1Deck(target);
@@ -118,14 +119,15 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (user && cloudDecks.length > 0) {
+    // Cloud-authenticated users: prefer last deck from their cloud decks
+    if (user && !isLocalGuest && cloudDecks.length > 0) {
       const lastDeck = localStorage.getItem(LAST_DECK_KEY);
       const target = (lastDeck && cloudDecks.find(d => d.name === lastDeck)) ? lastDeck : cloudDecks[0].name;
       setP1Deck(target);
       setP2Deck(target);
     }
     if (user && profile?.display_name) setP1Name(profile.display_name);
-  }, [user, cloudDecks, profile]);
+  }, [user, isLocalGuest, cloudDecks, profile]);
 
   function handleStart() {
     const d1 = allDecks.find(d => d.name === p1Deck);

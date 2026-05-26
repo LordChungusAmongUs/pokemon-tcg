@@ -528,8 +528,11 @@ function getTypedDiscardRequirement(atk: CardAttack): { type: EnergyType; count:
   return { count: parseInt(m[1]), type };
 }
 
-// skipTypedDiscard=true means the energy discard was already paid by resolveAttackDiscard
-export function attack(state: GameState, attackIndex: number, skipTypedDiscard = false): GameState {
+// skipTypedDiscard=true: energy discard was already paid by resolveAttackDiscard
+// skipCostCheck=true:    cost was already validated before the discard; don't re-check
+//   (needed because resolveAttackDiscard removes the typed energy BEFORE calling attack,
+//    which would otherwise make canPayCost fail even though cost was legitimately paid)
+export function attack(state: GameState, attackIndex: number, skipTypedDiscard = false, skipCostCheck = false): GameState {
   const active = state.activePlayer;
   const opponent = active === 'player1' ? 'player2' : 'player1';
   const attacker = state[active];
@@ -544,7 +547,7 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
   const effectiveEnergy = attacker.active.energyBurned
     ? attacker.active.attachedEnergy.map(e => ({ ...e, type: 'Fire' as EnergyType }))
     : attacker.active.attachedEnergy;
-  if (!canPayCost(atk.cost, effectiveEnergy)) return state;
+  if (!skipCostCheck && !canPayCost(atk.cost, effectiveEnergy)) return state;
 
   // ── Asleep check ─────────────────────────────────────────────────────────
   if (attacker.active.statusCondition === 'Asleep') {
@@ -1011,8 +1014,9 @@ export function resolveAttackDiscard(state: GameState, energyUids: string[]): Ga
     },
   }, `${player.name} discards ${pending.count} ${pending.requiredType} Energy for ${atkName}.`);
 
-  // Now run the attack — skip the typed discard intercept since it's already paid
-  return attack(next, pending.attackIndex, true);
+  // Run the attack — skip typed-discard intercept AND cost check (energy was just removed,
+  // but cost was already validated before the discard was requested)
+  return attack(next, pending.attackIndex, true, true);
 }
 
 export function cancelAttackDiscard(state: GameState): GameState {

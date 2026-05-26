@@ -494,23 +494,44 @@ function resolveKO(
     );
   }
 
-  // Auto-promote from bench if only one Pokemon left
+  // Send out a replacement active
   const updatedKnocked = next[knockedSide];
-  const firstBench = updatedKnocked.bench.findIndex(b => b !== null);
-  if (firstBench >= 0 && updatedKnocked.bench[firstBench]) {
+  const benchAvailable = updatedKnocked.bench.filter(b => b !== null);
+
+  if (benchAvailable.length === 1) {
+    // Only one choice — auto-promote immediately
+    const firstBench = updatedKnocked.bench.findIndex(b => b !== null);
     const promoted = updatedKnocked.bench[firstBench]!;
     const newBench = [...updatedKnocked.bench];
     newBench[firstBench] = null;
-    const allOthers = newBench.every(b => b === null);
-    if (allOthers) {
-      next = log(
-        { ...next, [knockedSide]: { ...updatedKnocked, active: promoted, bench: newBench } },
-        `${promoted.card.name} is promoted to Active!`,
-      );
-    }
+    next = log(
+      { ...next, [knockedSide]: { ...updatedKnocked, active: promoted, bench: newBench } },
+      `${promoted.card.name} is promoted to Active!`,
+    );
+  } else if (benchAvailable.length > 1) {
+    // Multiple choices — player must pick before anything else happens
+    next = log({ ...next, pendingSendOut: { side: knockedSide } },
+      `${updatedKnocked.name} must send out a new Active Pokémon!`);
   }
+  // length === 0: no bench left — win condition handled by checkWinConditions
 
   return next;
+}
+
+// ─── Send-out resolution (after KO with multiple bench options) ───────────────
+
+export function resolveSendOut(state: GameState, benchSlot: number): GameState {
+  const pending = state.pendingSendOut;
+  if (!pending) return state;
+  const p = state[pending.side];
+  const pokemon = p.bench[benchSlot];
+  if (!pokemon) return state;
+  const newBench = [...p.bench];
+  newBench[benchSlot] = null;
+  return log(
+    { ...state, pendingSendOut: undefined, [pending.side]: { ...p, active: pokemon, bench: newBench } },
+    `${pokemon.card.name} is sent out!`,
+  );
 }
 
 // ─── attack ──────────────────────────────────────────────────────────────────

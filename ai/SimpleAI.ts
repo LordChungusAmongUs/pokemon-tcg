@@ -2,7 +2,7 @@ import type { GameState, PlayerState, InPlayPokemon } from '@/engine/GameState';
 import {
   playBasicToBench, attachEnergy, attack, endTurn,
   doDrawPhase, playTrainer, retreat, resolvePendingTrainer, confirmRetreat,
-  resolveAttackDiscard,
+  resolveAttackDiscard, resolveSendOut,
 } from '@/engine/GameEngine';
 import { canPayCost, isBasicPokemon, isTrainer } from '@/lib/cardUtils';
 
@@ -60,6 +60,21 @@ export async function runAITurn(
 
   let state = getState();
   if (state.phase === 'gameover') return;
+
+  // If AI's active was KO'd and it needs to send out a replacement, do that first
+  if (state.pendingSendOut?.side === 'player2') {
+    const slot = state.player2.bench.findIndex(b => b !== null);
+    if (slot >= 0) {
+      state = resolveSendOut(state, slot);
+      setState(state);
+      await ack(state);
+      if (state.phase === 'gameover') return;
+    }
+  }
+
+  // If it's not the AI's turn (human still needs to send out after AI's attack KO'd them), stop here.
+  // The store's resolveSendOutAction will call endTurn once the human picks their active.
+  if (state.activePlayer !== 'player2') return;
 
   // Draw phase
   if (state.phase === 'draw') {
@@ -154,6 +169,13 @@ export async function runAITurn(
         } else {
           state = { ...state, pendingAttackDiscard: undefined }; // can't pay, skip
         }
+      }
+      // If AI's attack KO'd the opponent's active and opponent has multiple bench,
+      // the human player must send out — stop the AI turn here.
+      // resolveSendOutAction will call endTurn once the human picks their replacement.
+      if (state.pendingSendOut?.side === 'player1') {
+        setState(state);
+        return;
       }
       setState(state);
       await ack(state);

@@ -11,6 +11,7 @@ import {
   resolvePokemonTrader, resolveMaintenance, resolveItemFinder, resolveNightlyGarbageRun,
   resolvePokemonBreeder, resolveRecycle, confirmRetreat, resolveComputerSearch,
   resolveAttackDiscard, cancelAttackDiscard,
+  resolveSendOut,
 } from '@/engine/GameEngine';
 import type { EnergyType } from '@/engine/GameState';
 import { XP_REWARDS } from '@/lib/progression';
@@ -67,6 +68,7 @@ interface GameStore {
   confirmRetreatAction: (energyUids: string[]) => void;
   resolveAttackDiscardAction: (energyUids: string[]) => void;
   cancelAttackDiscardAction: () => void;
+  resolveSendOutAction: (benchSlot: number) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -116,8 +118,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   attackAction: (attackIndex) => set(s => {
     if (!s.game) return { game: null, selectedHandUid: null };
     const afterAttack = attack(s.game, attackIndex);
-    // If a typed energy discard is needed (e.g. Ember), wait for player to confirm
+    // Typed energy discard pending — wait for player to pick energy before attack executes
     if (afterAttack.pendingAttackDiscard) return { game: afterAttack, selectedHandUid: null };
+    // A KO happened and the KO'd player needs to send out a new active — don't end turn yet
+    if (afterAttack.pendingSendOut) return { game: afterAttack, selectedHandUid: null };
     const final = afterAttack.phase !== 'gameover' ? endTurn(afterAttack) : afterAttack;
     return { game: final, selectedHandUid: null };
   }),
@@ -217,4 +221,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
   cancelAttackDiscardAction: () => set(s => ({
     game: s.game ? cancelAttackDiscard(s.game) : null,
   })),
+
+  resolveSendOutAction: (benchSlot) => set(s => {
+    if (!s.game) return {};
+    const afterSendOut = resolveSendOut(s.game, benchSlot);
+    if (afterSendOut.pendingSendOut) return { game: afterSendOut }; // shouldn't happen
+    // If the current active player already attacked (i.e. we were waiting mid-turn),
+    // end the turn now that the replacement active has been chosen.
+    const ap = afterSendOut.activePlayer;
+    if (afterSendOut[ap].hasAttackedThisTurn) {
+      const final = afterSendOut.phase !== 'gameover' ? endTurn(afterSendOut) : afterSendOut;
+      return { game: final, selectedHandUid: null };
+    }
+    // Otherwise the send-out happened at end-of-turn / start of new turn — continue normally.
+    return { game: afterSendOut, selectedHandUid: null };
+  }),
 }));

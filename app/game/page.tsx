@@ -39,6 +39,7 @@ export default function GamePage() {
     resolvePokemonTraderAction, resolveMaintenanceAction, resolveItemFinderAction, resolveComputerSearchAction, resolveNightlyGarbageRunAction,
     resolvePokemonBreederAction, resolveRecycleAction, confirmRetreatAction,
     resolveAttackDiscardAction, cancelAttackDiscardAction,
+    resolveSendOutAction,
   } = useGameStore();
 
   const [detailCard, setDetailCard] = useState<CardData | null>(null);
@@ -129,7 +130,9 @@ export default function GamePage() {
     if (!game || game.phase === 'gameover') return;
     if (game.phase === 'setup') return;
     if (game.mode !== 'vs-ai') return;
-    if (game.activePlayer !== 'player2') return;
+    // Run AI on its turn OR when it needs to send out a replacement active after being KO'd
+    const needsAI = game.activePlayer === 'player2' || game.pendingSendOut?.side === 'player2';
+    if (!needsAI) return;
     if (aiRunning) return;
     setAiRunning(true);
     runAITurn(
@@ -137,7 +140,7 @@ export default function GamePage() {
       (s) => useGameStore.setState({ game: s }),
       waitForAck,
     ).finally(() => setAiRunning(false));
-  }, [game?.activePlayer, game?.turn, game?.phase]);
+  }, [game?.activePlayer, game?.turn, game?.phase, game?.pendingSendOut]);
 
   useEffect(() => {
     if (!game || game.phase !== 'gameover' || rewarded) return;
@@ -1350,6 +1353,37 @@ export default function GamePage() {
                   className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl">
                   Confirm ({selectedValue}/{count})
                 </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Send-out picker (forced after KO with multiple bench) ──── */}
+      {game.pendingSendOut?.side === 'player1' && (() => {
+        const bench = p1.bench.map((b, i) => b ? { pokemon: b, slot: i } : null).filter(Boolean) as { pokemon: import('@/engine/GameState').InPlayPokemon; slot: number }[];
+        return (
+          <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-900 rounded-2xl p-5 max-w-sm w-full space-y-3">
+              <h3 className="font-bold text-red-400 text-center text-lg">⚡ Send Out a Pokémon!</h3>
+              <p className="text-sm text-gray-400 text-center">
+                Your Active Pokémon was knocked out. Choose a replacement from your bench:
+              </p>
+              <div className="space-y-2">
+                {bench.map(({ pokemon, slot }) => {
+                  const hpLeft = (pokemon.card.hp ?? 0) - pokemon.damageTaken;
+                  return (
+                    <button key={pokemon.uid}
+                      onClick={() => resolveSendOutAction(slot)}
+                      className="w-full flex items-center gap-3 px-4 py-3 bg-gray-800 hover:bg-blue-800 rounded-xl text-white transition-colors">
+                      <CardImage card={pokemon.card} small />
+                      <div className="text-left">
+                        <p className="font-bold">{pokemon.card.name}</p>
+                        <p className="text-xs text-gray-400">HP: {hpLeft}/{pokemon.card.hp ?? '?'}</p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

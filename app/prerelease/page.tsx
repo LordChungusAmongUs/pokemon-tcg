@@ -41,6 +41,28 @@ export default function PrereleasePage() {
   const [buildingDeck, setBuildingDeck] = useState<CardData[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>('number');
 
+  // ── Derived data (hooks must run unconditionally, before any early returns) ─
+  // Unique pool non-energy cards, sorted by current sortMode
+  const nonEnergyPool = useMemo(() => {
+    const unique = openedCards.filter((card, i, arr) =>
+      arr.findIndex(c => c.id === card.id) === i && card.supertype !== 'Energy',
+    );
+    return [...unique].sort((a, b) => {
+      if (sortMode === 'number') {
+        const setOrder = a.set.localeCompare(b.set);
+        if (setOrder !== 0) return setOrder;
+        return (parseInt(a.number) || 0) - (parseInt(b.number) || 0);
+      }
+      if (sortMode === 'type') {
+        const ta = a.supertype === 'Pokémon' ? (a.types?.[0] ?? '') : a.supertype;
+        const tb = b.supertype === 'Pokémon' ? (b.types?.[0] ?? '') : b.supertype;
+        if (ta !== tb) return ta.localeCompare(tb);
+        return a.name.localeCompare(b.name);
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [openedCards, sortMode]);
+
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
@@ -257,29 +279,6 @@ export default function PrereleasePage() {
     const idx = buildingDeck.map(c => c.id).lastIndexOf(energyCard.id);
     if (idx >= 0) setBuildingDeck(prev => { const a = [...prev]; a.splice(idx, 1); return a; });
   }
-
-  // Unique pool non-energy cards, sorted by current sortMode
-  const nonEnergyPool = useMemo(() => {
-    const unique = openedCards.filter((card, i, arr) =>
-      arr.findIndex(c => c.id === card.id) === i && card.supertype !== 'Energy',
-    );
-    return [...unique].sort((a, b) => {
-      if (sortMode === 'number') {
-        // Sort by set name first (so mixed-set pools group by set), then card number
-        const setOrder = a.set.localeCompare(b.set);
-        if (setOrder !== 0) return setOrder;
-        return (parseInt(a.number) || 0) - (parseInt(b.number) || 0);
-      }
-      if (sortMode === 'type') {
-        const ta = a.supertype === 'Pokémon' ? (a.types?.[0] ?? '') : a.supertype;
-        const tb = b.supertype === 'Pokémon' ? (b.types?.[0] ?? '') : b.supertype;
-        if (ta !== tb) return ta.localeCompare(tb);
-        return a.name.localeCompare(b.name);
-      }
-      // name
-      return a.name.localeCompare(b.name);
-    });
-  }, [openedCards, sortMode]);
 
   // Deck summary
   const deckByName: Record<string, { card: CardData; count: number }> = {};

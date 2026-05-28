@@ -61,19 +61,26 @@ export async function runAITurn(
   let state = getState();
   if (state.phase === 'gameover') return;
 
-  // If AI's active was KO'd and it needs to send out a replacement, do that first
+  // If AI's active was KO'd and it needs to send out a replacement, do that first.
+  // This fires when the HUMAN just attacked and KO'd the AI's active (pendingSendOut was set
+  // and endTurn hasn't been called yet — activePlayer is still 'player1').
   if (state.pendingSendOut?.side === 'player2') {
     const slot = state.player2.bench.findIndex(b => b !== null);
     if (slot >= 0) {
       state = resolveSendOut(state, slot);
+      // The human attacked and caused this KO — their hasAttackedThisTurn is true.
+      // Call endTurn now so the AI's own turn can start properly.
+      const ap = state.activePlayer;
+      if (state[ap].hasAttackedThisTurn) {
+        state = endTurn(state);
+      }
       setState(state);
       await ack(state);
       if (state.phase === 'gameover') return;
     }
   }
 
-  // If it's not the AI's turn (human still needs to send out after AI's attack KO'd them), stop here.
-  // The store's resolveSendOutAction will call endTurn once the human picks their active.
+  // If it's still not the AI's turn, nothing more to do — human must send out first.
   if (state.activePlayer !== 'player2') return;
 
   // Draw phase
@@ -170,9 +177,19 @@ export async function runAITurn(
           state = { ...state, pendingAttackDiscard: undefined }; // can't pay, skip
         }
       }
-      // If AI's attack KO'd the opponent's active and opponent has multiple bench,
-      // the human player must send out — stop the AI turn here.
-      // resolveSendOutAction will call endTurn once the human picks their replacement.
+      // If AI's own active KO'd itself (confusion self-hit, recoil), send out replacement now
+      if (state.pendingSendOut?.side === 'player2') {
+        const slot = state.player2.bench.findIndex(b => b !== null);
+        if (slot >= 0) {
+          state = resolveSendOut(state, slot);
+          setState(state);
+          await ack(state);
+          if (state.phase === 'gameover') return;
+        }
+      }
+      // If AI's attack KO'd the opponent and opponent has multiple bench choices,
+      // the human must send out — stop the AI turn here.
+      // store.resolveSendOutAction will call endTurn once the human picks.
       if (state.pendingSendOut?.side === 'player1') {
         setState(state);
         return;

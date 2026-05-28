@@ -14,10 +14,85 @@ import { isActivePowerOn } from '@/engine/GameEngine';
 import { subscribeToFlips } from '@/engine/cardEffects';
 import { runAITurn } from '@/ai/SimpleAI';
 import { useAuthStore } from '@/store/authStore';
+import { recordAIGameResult } from '@/lib/aiDifficulty';
+import { DIFFICULTY_LABELS, DIFFICULTY_COLORS, type AIDifficulty } from '@/ai/deckGenerator';
 import Link from 'next/link';
 
 const AFK_TIMEOUT = 30;
 const AFK_WARNING_AT = 3;
+
+// ── Opponent Deck Viewer ────────────────────────────────────────────────────
+function OpponentDeckViewer({
+  cards,
+  onClose,
+  onCardClick,
+}: {
+  cards: CardData[];
+  onClose: () => void;
+  onCardClick: (card: CardData) => void;
+}) {
+  // Group identical cards
+  const groups = new Map<string, { card: CardData; count: number }>();
+  for (const c of cards) {
+    const key = c.id || c.name;
+    if (groups.has(key)) {
+      groups.get(key)!.count++;
+    } else {
+      groups.set(key, { card: c, count: 1 });
+    }
+  }
+
+  const sorted = [...groups.values()].sort((a, b) => {
+    const order = (c: CardData) =>
+      c.supertype === 'Pokémon' ? 0 : c.supertype === 'Trainer' ? 1 : 2;
+    return order(a.card) - order(b.card) || a.card.name.localeCompare(b.card.name);
+  });
+
+  const pokemon  = sorted.filter(g => g.card.supertype === 'Pokémon');
+  const trainers = sorted.filter(g => g.card.supertype === 'Trainer');
+  const energies = sorted.filter(g => g.card.supertype === 'Energy');
+
+  function Section({ title, items }: { title: string; items: typeof sorted }) {
+    if (items.length === 0) return null;
+    return (
+      <div className="space-y-2">
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">{title}</p>
+        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+          {items.map(({ card, count }) => (
+            <div key={card.id || card.name} className="relative">
+              <CardImage card={card} small onClick={() => onCardClick(card)} />
+              {count > 1 && (
+                <span className="absolute top-0.5 right-0.5 bg-black/80 text-white text-[9px] font-bold px-1 rounded">
+                  ×{count}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
+        <div>
+          <h2 className="font-bold text-white">CPU&apos;s Full Deck</h2>
+          <p className="text-xs text-gray-400">{cards.length} cards across all zones</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="text-gray-400 hover:text-white text-2xl leading-none px-2"
+        >×</button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <Section title={`Pokémon (${pokemon.reduce((s, g) => s + g.count, 0)})`} items={pokemon} />
+        <Section title={`Trainers (${trainers.reduce((s, g) => s + g.count, 0)})`} items={trainers} />
+        <Section title={`Energy (${energies.reduce((s, g) => s + g.count, 0)})`} items={energies} />
+      </div>
+    </div>
+  );
+}
 
 // Discriminated union for the bottom-sheet preview context
 type PreviewState =
@@ -54,6 +129,9 @@ export default function GamePage() {
   } | null>(null);
   const { awardGameResult, addEncountered, addToCollection, pendingLevelUp, dismissLevelUp } = useAuthStore();
   const [promoWon, setPromoWon] = useState<CardData | null>(null);
+  const [tierChange, setTierChange] = useState<{ tier: AIDifficulty; promoted: boolean; demoted: boolean } | null>(null);
+  const [showOpponentDeck, setShowOpponentDeck] = useState(false);
+  const [opponentDeckCards, setOpponentDeckCards] = useState<CardData[]>([]);
   const [passModal, setPassModal] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [coinFlipDisplay, setCoinFlipDisplay] = useState<boolean[] | null>(null);
@@ -147,6 +225,13 @@ export default function GamePage() {
     setRewarded(true);
     const won = game.winner === 'player1';
     awardGameResult(won, game.mode === 'local-2p' ? 'vs-ai' : 'vs-ai');
+    // Track AI difficulty progression
+    if (game.mode === 'vs-ai') {
+      const outcome = recordAIGameResult(won);
+      if (outcome.promoted || outcome.demoted) {
+        setTierChange({ tier: outcome.tier, promoted: outcome.promoted, demoted: outcome.demoted });
+      }
+    }
     // Award 1 random Wizards Black Star Promo on AI win — #1-18 and #20-28 only
     if (won && game.mode === 'vs-ai') {
       const PROMO_RANGE = new Set([
@@ -167,6 +252,19 @@ export default function GamePage() {
     ]);
     const ids = [...new Set(allCards.map(c => c.card.id))].filter(id => !id.startsWith('basic-'));
     addEncountered(ids);
+    // Pre-compute opponent full deck for the viewer
+    if (game.mode === 'vs-ai') {
+      const p2 = game.player2;
+      const deckCards: CardData[] = [
+        ...p2.deck.map(c => c.card),
+        ...p2.hand.map(c => c.card),
+        ...p2.discard.map(c => c.card),
+        ...p2.prizes.map(c => c.card),
+        ...(p2.active ? [p2.active.card] : []),
+        ...p2.bench.filter(Boolean).map(b => b!.card),
+      ];
+      setOpponentDeckCards(deckCards);
+    }
   }, [game?.phase]);
 
   useEffect(() => {
@@ -710,9 +808,29 @@ export default function GamePage() {
       {/* Game over */}
       {game.phase === 'gameover' && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-2xl p-8 text-center space-y-4">
+          <div className="bg-gray-800 rounded-2xl p-8 text-center space-y-4 max-w-sm w-full mx-4">
             <p className="text-3xl font-bold text-yellow-400">Game Over!</p>
             <p className="text-xl">{game.winner ? game[game.winner].name : '???'} wins!</p>
+
+            {/* AI tier change notification */}
+            {tierChange && game.mode === 'vs-ai' && (
+              <div className={`rounded-xl px-4 py-3 space-y-1 ${
+                tierChange.promoted ? 'bg-green-900/50 border border-green-500/40' : 'bg-red-900/50 border border-red-500/40'
+              }`}>
+                <p className="text-sm font-bold">
+                  {tierChange.promoted ? '⬆️ Tier Up!' : '⬇️ Tier Down'}
+                </p>
+                <p className={`text-lg font-black ${DIFFICULTY_COLORS[tierChange.tier]}`}>
+                  Now: Tier {tierChange.tier} — {DIFFICULTY_LABELS[tierChange.tier]}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {tierChange.promoted
+                    ? 'Great job! The AI will be stronger next match.'
+                    : 'Keep practicing — the AI will be easier next match.'}
+                </p>
+              </div>
+            )}
+
             {promoWon && (
               <div className="bg-yellow-900/40 rounded-xl px-3 py-3 space-y-2">
                 <p className="text-sm text-yellow-300">⭐ Promo earned: <span className="font-bold">{promoWon.name}</span></p>
@@ -721,11 +839,31 @@ export default function GamePage() {
                 </div>
               </div>
             )}
+
+            {/* View CPU Deck button (vs-ai only) */}
+            {game.mode === 'vs-ai' && (
+              <button
+                onClick={() => setShowOpponentDeck(true)}
+                className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-medium transition-all"
+              >
+                🔍 View CPU&apos;s Deck
+              </button>
+            )}
+
             <Link href="/" className="block w-full py-3 bg-yellow-500 rounded-xl font-bold text-black hover:bg-yellow-400">
               Back to Menu
             </Link>
           </div>
         </div>
+      )}
+
+      {/* Opponent Deck Viewer */}
+      {showOpponentDeck && opponentDeckCards.length > 0 && (
+        <OpponentDeckViewer
+          cards={opponentDeckCards}
+          onClose={() => setShowOpponentDeck(false)}
+          onCardClick={setDetailCard}
+        />
       )}
 
       {detailCard && <CardDetail card={detailCard} onClose={() => setDetailCard(null)} />}

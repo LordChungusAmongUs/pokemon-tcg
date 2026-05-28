@@ -1,6 +1,6 @@
 import type {
   GameState, PlayerState, CardData, CardInstance, InPlayPokemon,
-  EnergyInstance, EnergyType,
+  EnergyInstance, EnergyType, CardAttack,
 } from './GameState';
 import { calculateDamage, applyPoisonDamage, applyBurnDamage, isKnockedOut } from './damage';
 import { checkWinConditions, checkDeckOut } from './winConditions';

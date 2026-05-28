@@ -3,13 +3,14 @@ import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useGameStore } from '@/store/gameStore';
 import type { CardData } from '@/engine/GameState';
-import { BASIC_ENERGY_CARDS, ALL_CARDS, isSetUnlocked } from '@/lib/cardUtils';
-import { getAvailableAIDecks } from '@/lib/starterDecks';
+import { BASIC_ENERGY_CARDS, ALL_CARDS } from '@/lib/cardUtils';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { computeLevel } from '@/lib/progression';
 import { STARTER_DECKS } from '@/lib/starterDecks';
 import CardImage from '@/components/cards/CardImage';
+import { generateAIDeck, DIFFICULTY_LABELS, DIFFICULTY_DESCRIPTIONS, DIFFICULTY_COLORS, type AIDifficulty } from '@/ai/deckGenerator';
+import { getAITier, getStreakData, streakDisplay } from '@/lib/aiDifficulty';
 
 const BROWSE_CARDS = [...ALL_CARDS, ...BASIC_ENERGY_CARDS];
 
@@ -99,8 +100,16 @@ export default function HomePage() {
   const [p1Name, setP1Name] = useState('Player 1');
   const [p2Name, setP2Name] = useState('CPU');
   const [mode, setMode] = useState<'vs-ai' | 'local-2p'>('vs-ai');
+  const [aiTier, setAiTier] = useState<AIDifficulty>(1);
+  const [streak, setStreak] = useState({ type: null as 'win' | 'loss' | null, count: 0 });
   const { startGame } = useGameStore();
   const router = useRouter();
+
+  // Load AI difficulty + streak from localStorage on mount
+  useEffect(() => {
+    setAiTier(getAITier());
+    setStreak(getStreakData());
+  }, []);
 
   const allDecks: { name: string; cardIds: string[] }[] = (user && !isLocalGuest)
     ? cloudDecks.map(d => ({ name: d.name, cardIds: d.card_ids }))
@@ -138,10 +147,9 @@ export default function HomePage() {
     let cards2: CardData[];
     let p2NameFinal: string;
     if (mode === 'vs-ai') {
-      const availableDecks = getAvailableAIDecks(collection, isSetUnlocked);
-      const aiDeckDef = availableDecks[Math.floor(Math.random() * availableDecks.length)];
-      cards2 = aiDeckDef.cardIds.map(id => BROWSE_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
-      p2NameFinal = 'CPU';
+      const generated = generateAIDeck(aiTier);
+      cards2 = generated.cards;
+      p2NameFinal = `CPU (${DIFFICULTY_LABELS[aiTier]})`;
     } else {
       const d2 = allDecks.find(d => d.name === p2Deck);
       if (!d2) { alert('Select a deck for Player 2 first.'); return; }
@@ -452,6 +460,51 @@ export default function HomePage() {
               </select>
             )}
           </div>
+
+          {/* AI Difficulty (vs-ai only) */}
+          {mode === 'vs-ai' && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-gray-400">AI Difficulty</label>
+                <span className="text-xs text-gray-500">3 wins = ↑ tier • 3 losses = ↓ tier</span>
+              </div>
+              {/* Tier display */}
+              <div className="bg-black/30 rounded-xl px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className={`font-bold text-base ${DIFFICULTY_COLORS[aiTier]}`}>
+                    Tier {aiTier} — {DIFFICULTY_LABELS[aiTier]}
+                  </span>
+                  <span className="text-lg tracking-wider">{streakDisplay(streak)}</span>
+                </div>
+                <p className="text-xs text-gray-400">{DIFFICULTY_DESCRIPTIONS[aiTier]}</p>
+                {/* Streak progress */}
+                {streak.count > 0 && (
+                  <p className="text-xs text-gray-500">
+                    {streak.type === 'win'
+                      ? `${streak.count}/3 wins toward Tier ${Math.min(5, aiTier + 1)}`
+                      : `${streak.count}/3 losses — next loss drops to Tier ${Math.max(1, aiTier - 1)}`}
+                  </p>
+                )}
+              </div>
+              {/* Manual override arrows */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { const t = Math.max(1, aiTier - 1) as AIDifficulty; setAiTier(t); import('@/lib/aiDifficulty').then(m => m.setAITier(t)); }}
+                  disabled={aiTier <= 1}
+                  className="flex-1 py-1.5 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-lg text-xs font-medium transition-all"
+                >
+                  ◀ Easier
+                </button>
+                <button
+                  onClick={() => { const t = Math.min(5, aiTier + 1) as AIDifficulty; setAiTier(t); import('@/lib/aiDifficulty').then(m => m.setAITier(t)); }}
+                  disabled={aiTier >= 5}
+                  className="flex-1 py-1.5 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-lg text-xs font-medium transition-all"
+                >
+                  Harder ▶
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Player 2 (only if local-2p) */}
           {mode === 'local-2p' && (

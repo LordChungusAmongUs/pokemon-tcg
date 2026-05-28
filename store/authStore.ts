@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import type { Profile, Deck } from '@/types/database';
-import { computeLevel, CREDIT_REWARDS, STARTING_CREDITS, VOUCHER_THRESHOLD, SET_PROGRESSION, getLevelUpReward, type LevelReward } from '@/lib/progression';
+import { computeLevel, CREDIT_REWARDS, STARTING_CREDITS, VOUCHER_THRESHOLD, SET_PROGRESSION, getLevelUpReward, computeGameCredits, type LevelReward } from '@/lib/progression';
 import { generatePackCards } from '@/lib/progression';
 import { setCompletionPct, ALL_CARDS, isSetUnlocked } from '@/lib/cardUtils';
 import { STARTER_DECKS } from '@/lib/starterDecks';
@@ -157,8 +157,14 @@ interface AuthStore {
   deleteDeck: (id: string) => Promise<void>;
   addXP: (amount: number) => Promise<void>;
   addCredits: (amount: number) => Promise<void>;
-  awardGameResult: (won: boolean, mode?: 'vs-ai' | 'pvp') => Promise<void>;
+  awardGameResult: (
+    won: boolean,
+    mode?: 'vs-ai' | 'pvp',
+    opts?: { prizesTaken?: number; aiTier?: number }
+  ) => Promise<{ creditsEarned: number; packAwarded?: string }>;
   claimDailyCredits: () => Promise<boolean>;
+  dailyBonusPending: boolean;
+  clearDailyBonus: () => void;
   addToCollection: (cardIds: string[]) => void;
   addEncountered: (cardIds: string[]) => void;
   ensureStarterDeck: () => void;
@@ -188,6 +194,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   unopenedPacks: {},
   onboardingStep: null,
   onboardingPromoCardId: null,
+  dailyBonusPending: false,
 
   init: async () => {
     // Restore local guest session first (works without any Supabase setup)
@@ -472,17 +479,39 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     await get().refreshProfile();
   },
 
-  awardGameResult: async (won, mode = 'vs-ai') => {
-    const { addXP, addCredits } = get();
+  awardGameResult: async (won, mode = 'vs-ai', opts = {}) => {
+    const { addXP, addCredits, addUnopenedPacks, collection, isLocalGuest } = get();
+    const { prizesTaken = 0, aiTier = 1 } = opts;
+
     const xp = won ? 100 : 25;
-    let credits: number;
+    let creditsEarned: number;
+    let packAwarded: string | undefined;
+
     if (mode === 'pvp') {
-      credits = won ? CREDIT_REWARDS.winPvp : CREDIT_REWARDS.losePvp;
+      creditsEarned = won ? CREDIT_REWARDS.winPvp : CREDIT_REWARDS.losePvp;
     } else {
-      credits = won ? CREDIT_REWARDS.winAI : CREDIT_REWARDS.loseAI;
+      // New formula: (prizesTaken × 5 + (won ? 20 : 0)) × tierMultiplier
+      creditsEarned = computeGameCredits(prizesTaken, won, aiTier);
     }
+
     await addXP(xp);
-    await addCredits(credits);
+    if (creditsEarned > 0) await addCredits(creditsEarned);
+
+    // Auto-grant a booster pack on any vs-ai win
+    if (won && mode === 'vs-ai') {
+      const unlockedSets = SET_PROGRESSION
+        .filter(s => s.prerequisite === null || isSetUnlocked(s.name, collection))
+        .map(s => s.name)
+        .filter(name => ALL_CARDS.some(c => c.set === name));
+
+      if (unlockedSets.length > 0) {
+        const chosenSet = unlockedSets[Math.floor(Math.random() * unlockedSets.length)];
+        addUnopenedPacks(chosenSet, 1);
+        packAwarded = chosenSet;
+      }
+    }
+
+    return { creditsEarned, packAwarded };
   },
 
   claimDailyCredits: async () => {
@@ -497,8 +526,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       localStorage.setItem(key, String(now));
     } catch { return false; }
     await addCredits(CREDIT_REWARDS.daily);
+    set({ dailyBonusPending: true });
     return true;
   },
+
+  clearDailyBonus: () => set({ dailyBonusPending: false }),
 
   addToCollection: (cardIds: string[]) => {
     const { user, collection } = get();

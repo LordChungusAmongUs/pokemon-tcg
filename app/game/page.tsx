@@ -132,6 +132,7 @@ export default function GamePage() {
   const [tierChange, setTierChange] = useState<{ tier: AIDifficulty; promoted: boolean; demoted: boolean } | null>(null);
   const [showOpponentDeck, setShowOpponentDeck] = useState(false);
   const [opponentDeckCards, setOpponentDeckCards] = useState<CardData[]>([]);
+  const [gameRewards, setGameRewards] = useState<{ credits: number; pack?: string; prizesTaken: number; tier: number } | null>(null);
   const [passModal, setPassModal] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [coinFlipDisplay, setCoinFlipDisplay] = useState<boolean[] | null>(null);
@@ -224,14 +225,28 @@ export default function GamePage() {
     if (!game || game.phase !== 'gameover' || rewarded) return;
     setRewarded(true);
     const won = game.winner === 'player1';
-    awardGameResult(won, game.mode === 'local-2p' ? 'vs-ai' : 'vs-ai');
+
+    // Count prizes player1 took (started at 6, fewer left = more taken)
+    const prizesTaken = Math.max(0, 6 - game.player1.prizes.length);
+
     // Track AI difficulty progression
+    let aiTier = 1;
     if (game.mode === 'vs-ai') {
       const outcome = recordAIGameResult(won);
+      aiTier = outcome.tier;
       if (outcome.promoted || outcome.demoted) {
         setTierChange({ tier: outcome.tier, promoted: outcome.promoted, demoted: outcome.demoted });
       }
     }
+
+    // Award credits + optional pack (async, capture results)
+    awardGameResult(won, game.mode === 'local-2p' ? 'vs-ai' : 'vs-ai', {
+      prizesTaken,
+      aiTier: game.mode === 'vs-ai' ? aiTier : 1,
+    }).then(({ creditsEarned, packAwarded }) => {
+      setGameRewards({ credits: creditsEarned, pack: packAwarded, prizesTaken, tier: aiTier });
+    });
+
     // Award 1 random Wizards Black Star Promo on AI win — #1-18 and #20-28 only
     if (won && game.mode === 'vs-ai') {
       const PROMO_RANGE = new Set([
@@ -811,6 +826,41 @@ export default function GamePage() {
           <div className="bg-gray-800 rounded-2xl p-8 text-center space-y-4 max-w-sm w-full mx-4">
             <p className="text-3xl font-bold text-yellow-400">Game Over!</p>
             <p className="text-xl">{game.winner ? game[game.winner].name : '???'} wins!</p>
+
+            {/* Rewards breakdown */}
+            {gameRewards && (
+              <div className="bg-black/30 rounded-xl px-4 py-3 space-y-2 text-left">
+                <p className="text-xs font-bold text-yellow-400 uppercase tracking-widest text-center">Rewards</p>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">{gameRewards.prizesTaken} prize{gameRewards.prizesTaken !== 1 ? 's' : ''} × 5</span>
+                    <span className="text-white font-medium">{gameRewards.prizesTaken * 5} cr</span>
+                  </div>
+                  {game.winner === 'player1' && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Win bonus</span>
+                      <span className="text-white font-medium">+20 cr</span>
+                    </div>
+                  )}
+                  {game.mode === 'vs-ai' && gameRewards.tier > 1 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Tier {gameRewards.tier} multiplier</span>
+                      <span className="text-white font-medium">× {[1.0,1.2,1.5,1.75,2.0][gameRewards.tier - 1]}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-white/10 mt-1 pt-1 flex justify-between font-bold">
+                    <span className="text-yellow-400">Total credits</span>
+                    <span className="text-yellow-400">+{gameRewards.credits} 💰</span>
+                  </div>
+                  {gameRewards.pack && (
+                    <div className="flex justify-between text-green-400">
+                      <span>Booster pack</span>
+                      <span className="font-medium">📦 {gameRewards.pack}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* AI tier change notification */}
             {tierChange && game.mode === 'vs-ai' && (

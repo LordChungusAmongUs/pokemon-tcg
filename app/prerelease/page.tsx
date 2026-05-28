@@ -74,7 +74,7 @@ export default function PrereleasePage() {
         : null;
 
     const allIds: string[] = [];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 10; i++) {
       if (packableCards.length > 0) allIds.push(...pickPackCards(packableCards));
       const e1 = pickEnergy(); if (e1) allIds.push(e1);
       const e2 = pickEnergy(); if (e2) allIds.push(e2);
@@ -129,7 +129,7 @@ export default function PrereleasePage() {
             <Link href="/" className="text-sm text-gray-400 hover:text-white">← Home</Link>
           </div>
           <p className="text-sm text-gray-400">
-            Open 5 packs from the upcoming set and battle with your sealed pool!
+            Open 10 packs from the upcoming set and battle with your sealed pool!
           </p>
           <div className="space-y-3">
             {prereleaseInvites.map(setName => {
@@ -147,7 +147,7 @@ export default function PrereleasePage() {
                     </p>
                   </div>
                   <ul className="text-sm text-gray-300 space-y-0.5">
-                    <li>• Receive 5 booster packs from {setName}</li>
+                    <li>• Receive 10 booster packs from {setName}</li>
                     <li>• Build a 40-card sealed deck from your pool</li>
                     <li>• Battle an AI opponent</li>
                   </ul>

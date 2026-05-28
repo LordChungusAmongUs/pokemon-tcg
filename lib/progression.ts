@@ -16,7 +16,31 @@ export const CREDIT_REWARDS = {
   winPvp: 100,
   losePvp: 25,
   daily: 100,
+  perPrize: 5,       // credits per prize card taken
+  winBonus: 20,      // flat bonus for winning
 } as const;
+
+// Multiplier applied to credits earned based on AI difficulty tier
+export const TIER_MULTIPLIERS: Record<number, number> = {
+  1: 1.0,
+  2: 1.2,
+  3: 1.5,
+  4: 1.75,
+  5: 2.0,
+};
+
+/** Compute credits earned at game end.
+ *  formula = floor((prizesTaken × 5 + (won ? 20 : 0)) × tierMultiplier)
+ */
+export function computeGameCredits(
+  prizesTaken: number,
+  won: boolean,
+  aiTier: number,
+): number {
+  const multiplier = TIER_MULTIPLIERS[aiTier] ?? 1.0;
+  const base = prizesTaken * CREDIT_REWARDS.perPrize + (won ? CREDIT_REWARDS.winBonus : 0);
+  return Math.floor(base * multiplier);
+}
 
 export type LevelRewardType = 'credits' | 'rare-voucher' | 'holo-voucher' | 'deck-voucher' | 'pack-voucher' | 'promo';
 

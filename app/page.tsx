@@ -63,7 +63,7 @@ function deckToCards(deck: LocalDeck): CardData[] {
 }
 
 export default function HomePage() {
-  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount, prereleaseInvites, freeVouchers, collection, pendingLevelUp, dismissLevelUp, onboardingStep, onboardingPromoCardId, advanceOnboarding, unopenedPacks } = useAuthStore();
+  const { user, profile, isLocalGuest, decks: cloudDecks, signOut, resetAccount, prereleaseInvites, freeVouchers, collection, pendingLevelUp, dismissLevelUp, onboardingStep, onboardingPromoCardId, advanceOnboarding, unopenedPacks, dailyBonusPending, clearDailyBonus } = useAuthStore();
   const [seenNotifs, setSeenNotifs] = useState<Set<string>>(new Set());
   useEffect(() => { setSeenNotifs(loadSeenNotifs()); }, []);
 
@@ -268,6 +268,15 @@ export default function HomePage() {
               Awesome!
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Daily bonus toast */}
+      {dailyBonusPending && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-yellow-500 text-black font-bold px-5 py-3 rounded-2xl shadow-2xl animate-bounce">
+          <span className="text-2xl">🌅</span>
+          <span>Daily bonus: +100 credits!</span>
+          <button onClick={clearDailyBonus} className="ml-2 text-black/60 hover:text-black text-xl leading-none">×</button>
         </div>
       )}
 

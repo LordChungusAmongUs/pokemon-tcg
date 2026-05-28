@@ -16,7 +16,7 @@ const EXCLUDED = new Set(['Base Set 2', 'Diamond & Pearl', 'Wizards Black Star P
 const SHOP_SETS = SET_PROGRESSION.filter(s => !EXCLUDED.has(s.name));
 
 export default function ShopPage() {
-  const { user, profile, addCredits, addToCollection, collection, encountered, freeVouchers, redeemVoucher, saveDeck, isLocalGuest, packVouchers, usePackVoucher, unopenedPacks, addUnopenedPacks, consumeOnePack } = useAuthStore();
+  const { user, profile, addCredits, addToCollection, collection, encountered, freeVouchers, redeemVoucher, saveDeck, isLocalGuest, packVouchers, usePackVoucher, unopenedPacks, addUnopenedPacks, consumeOnePack, completedPrereleases } = useAuthStore();
   const [packResult, setPackResult] = useState<CardData[]>([]);
   const [packLabel, setPackLabel] = useState('');
   const [openingSet, setOpeningSet] = useState<string | null>(null);
@@ -258,7 +258,16 @@ export default function ShopPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {SHOP_SETS.map(({ name, prerequisite }) => {
-                const unlocked = isSetUnlocked(name, collection);
+                // Base Set requires completing the prerelease event first;
+                // fall back to allowing access if player already owns Base Set cards (backward compat).
+                const baseSetGate = name === 'Base'
+                  ? (completedPrereleases.includes('Base') || Object.keys(collection).some(id => {
+                      const c = ALL_CARDS.find(card => card.id === id);
+                      return c?.set === 'Base' && (collection[id] ?? 0) > 0;
+                    }))
+                  : true;
+                const unlocked = baseSetGate && isSetUnlocked(name, collection);
+                const baseNotDone = name === 'Base' && !baseSetGate;
                 const pct = prerequisite ? Math.round(setCompletionPct(prerequisite, collection) * 100) : 100;
                 const voucherPct = Math.round(VOUCHER_THRESHOLD * 100);
                 const unlockPct = Math.round(UNLOCK_THRESHOLD * 100);
@@ -273,7 +282,12 @@ export default function ShopPage() {
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex-1">
                         <div className="font-bold text-sm">{name}</div>
-                        {!unlocked && prerequisite && (
+                        {baseNotDone && (
+                        <div className="text-xs text-blue-400 mt-0.5">
+                          🎮 Complete the Base Set Prerelease first!
+                        </div>
+                      )}
+                      {!unlocked && !baseNotDone && prerequisite && (
                           <>
                             <div className="text-xs text-yellow-500 mt-0.5">
                               🔒 {prerequisite}: {pct}% / {unlockPct}% to unlock
@@ -285,7 +299,7 @@ export default function ShopPage() {
                             )}
                           </>
                         )}
-                        {unlocked && prerequisite && (
+                        {unlocked && (
                           <div className="text-xs text-green-500 mt-0.5">✓ Unlocked</div>
                         )}
                         {hasVoucher && (
@@ -425,8 +439,15 @@ export default function ShopPage() {
             </div>
           );
 
+          // Whether the player has completed the Base Set prerelease (or already owns Base cards — backward compat)
+          const basePrereleaseDone = completedPrereleases.includes('Base')
+            || Object.keys(collection).some(id => {
+                const c = ALL_CARDS.find(card => card.id === id);
+                return c?.set === 'Base' && (collection[id] ?? 0) > 0;
+              });
+
           // Explicit deck groups — order and membership controlled here
-          const GROUPS: { label: string; ids: string[]; prereqSet: string | null; prereqPct: number }[] = [
+          const GROUPS: { label: string; ids: string[]; prereqSet: string | null; prereqPct: number; requiresPrerelease?: string }[] = [
             {
               label: 'Starter Set',
               ids: ['starter-machamp'],
@@ -436,6 +457,7 @@ export default function ShopPage() {
               label: 'Base Set',
               ids: ['starter-overgrowth', 'starter-zap', 'starter-brushfire', 'starter-blackout'],
               prereqSet: null, prereqPct: 0,
+              requiresPrerelease: 'Base',
             },
             {
               label: 'Jungle',
@@ -494,14 +516,23 @@ export default function ShopPage() {
                 if (groupDecks.length === 0) return null;
                 const prereqPct = group.prereqSet ? Math.round(setCompletionPct(group.prereqSet, collection) * 100) : 100;
                 const threshold  = Math.round(group.prereqPct * 100);
-                const groupUnlocked = group.prereqSet === null || prereqPct >= threshold;
+                const prereqMet  = group.prereqSet === null || prereqPct >= threshold;
+                // Check prerelease gate (Base Set theme decks require completing the prerelease first)
+                const prereqGateMet = !group.requiresPrerelease
+                  || (group.requiresPrerelease === 'Base' ? basePrereleaseDone : true);
+                const groupUnlocked = prereqMet && prereqGateMet;
                 return (
                   <div key={group.label}>
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className={`text-xs font-bold uppercase tracking-wider ${groupUnlocked ? 'text-gray-300' : 'text-gray-600'}`}>
                         {groupUnlocked ? '' : '🔒 '}{group.label} Decks
                       </h3>
-                      {!groupUnlocked && group.prereqSet && (
+                      {!groupUnlocked && !prereqGateMet && (
+                        <span className="text-[10px] text-blue-500">
+                          (Complete Base Set Prerelease first)
+                        </span>
+                      )}
+                      {!groupUnlocked && prereqGateMet && group.prereqSet && (
                         <span className="text-[10px] text-yellow-600">
                           ({group.prereqSet}: {prereqPct}% / {threshold}% needed)
                         </span>

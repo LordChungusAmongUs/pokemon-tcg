@@ -191,16 +191,19 @@ export default function HomePage() {
       {onboardingStep === 2 && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border-2 border-blue-500 rounded-2xl p-6 max-w-sm w-full text-center space-y-4">
-            <p className="text-xs text-blue-400 uppercase tracking-widest font-bold">Free Packs!</p>
-            <h2 className="text-2xl font-black text-white">3 Booster Packs</h2>
-            <div className="flex justify-center gap-3 py-2">
-              {[0,1,2].map(i => (
-                <div key={i} className="w-16 h-24 bg-gradient-to-b from-blue-600 to-blue-900 rounded-lg border-2 border-blue-400 flex items-center justify-center text-3xl shadow-lg">📦</div>
-              ))}
+            <p className="text-xs text-blue-400 uppercase tracking-widest font-bold">You&apos;re Invited!</p>
+            <h2 className="text-2xl font-black text-white">Base Set Prerelease</h2>
+            <div className="flex justify-center py-2">
+              <div className="w-24 h-24 bg-gradient-to-b from-blue-600 to-indigo-900 rounded-2xl border-2 border-blue-400 flex items-center justify-center text-5xl shadow-lg">🎮</div>
             </div>
-            <p className="text-sm text-gray-300">3 free <span className="text-blue-300 font-bold">Base Set</span> booster packs are waiting in your Shop inventory. Open them one at a time or all at once!</p>
+            <p className="text-sm text-gray-300">
+              You have a <span className="text-blue-300 font-bold">Base Set Prerelease</span> invite waiting!
+            </p>
+            <p className="text-sm text-gray-400">
+              Open 10 packs, build a 40-card deck, and battle. Completing it <span className="text-yellow-300 font-bold">unlocks Base Set boosters &amp; theme decks</span> in the Shop.
+            </p>
             <button onClick={() => advanceOnboarding()} className="w-full py-3 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-xl text-lg">
-              Sweet! →
+              Let&apos;s Go! 🎴
             </button>
           </div>
         </div>

@@ -22,15 +22,24 @@ const ENERGY_COLORS: Partial<Record<EnergyType, string>> = {
   Fighting:  'bg-orange-700 hover:bg-orange-600',
 };
 
+// Sets that pull from multiple pools instead of just their own set
+const MIXED_PACK_SETS: Record<string, Array<{ set: string; count: number }>> = {
+  'Jungle':  [{ set: 'Jungle', count: 5 }, { set: 'Base', count: 5 }],
+  'Fossil':  [{ set: 'Fossil', count: 5 }, { set: 'Base', count: 5 }],
+};
+
+type SortMode = 'number' | 'type' | 'name';
+
 export default function PrereleasePage() {
   const router = useRouter();
-  const { user, prereleaseInvites, usePrereleaseInvite, addToCollection, collection } = useAuthStore();
+  const { user, prereleaseInvites, usePrereleaseInvite, addCompletedPrerelease, addToCollection, collection } = useAuthStore();
   const { startGame } = useGameStore();
 
   const [phase, setPhase] = useState<'list' | 'opening' | 'building'>('list');
   const [activeSet, setActiveSet] = useState<string | null>(null);
   const [openedCards, setOpenedCards] = useState<CardData[]>([]);
   const [buildingDeck, setBuildingDeck] = useState<CardData[]>([]);
+  const [sortMode, setSortMode] = useState<SortMode>('number');
 
   if (!user) {
     return (
@@ -59,30 +68,38 @@ export default function PrereleasePage() {
     );
   }
 
+  // ── Open packs for a given set (supports mixed-set pools) ───────────────────
   function openPacks(setName: string) {
-    const setCards = ALL_CARDS.filter(c => c.set === setName);
-    if (setCards.length === 0) return;
-
-    const basicEnergyPool = setCards.filter(c => c.supertype === 'Energy' && !c.rarity);
-    const packableCards = setCards
-      .filter(c => !basicEnergyPool.some(e => e.id === c.id))
-      .map(c => ({ id: c.id, rarity: c.rarity || 'Common' }));
-
-    const pickEnergy = () =>
-      basicEnergyPool.length > 0
-        ? basicEnergyPool[Math.floor(Math.random() * basicEnergyPool.length)].id
-        : null;
-
     const allIds: string[] = [];
-    for (let i = 0; i < 10; i++) {
-      if (packableCards.length > 0) allIds.push(...pickPackCards(packableCards));
-      const e1 = pickEnergy(); if (e1) allIds.push(e1);
-      const e2 = pickEnergy(); if (e2) allIds.push(e2);
+
+    const mixedSets = MIXED_PACK_SETS[setName];
+    const packGroups = mixedSets ?? [{ set: setName, count: 10 }];
+
+    for (const { set, count } of packGroups) {
+      const setCards = ALL_CARDS.filter(c => c.set === set);
+      if (setCards.length === 0) continue;
+
+      const basicEnergyPool = setCards.filter(c => c.supertype === 'Energy' && !c.rarity);
+      const packableCards = setCards
+        .filter(c => !basicEnergyPool.some(e => e.id === c.id))
+        .map(c => ({ id: c.id, rarity: c.rarity || 'Common' }));
+
+      const pickEnergy = () =>
+        basicEnergyPool.length > 0
+          ? basicEnergyPool[Math.floor(Math.random() * basicEnergyPool.length)].id
+          : null;
+
+      for (let i = 0; i < count; i++) {
+        if (packableCards.length > 0) allIds.push(...pickPackCards(packableCards));
+        const e1 = pickEnergy(); if (e1) allIds.push(e1);
+        const e2 = pickEnergy(); if (e2) allIds.push(e2);
+      }
     }
 
     const cards = allIds.map(id => ALL_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
 
     usePrereleaseInvite(setName);
+    addCompletedPrerelease(setName);   // unlock set content in shop
     addToCollection(allIds);
     setOpenedCards(cards);
     setActiveSet(setName);
@@ -90,7 +107,6 @@ export default function PrereleasePage() {
   }
 
   function goToBuilding() {
-    // Auto-seed the deck with all non-energy pool cards as a starting point
     const nonEnergy = openedCards.filter(c => c.supertype !== 'Energy');
     setBuildingDeck(nonEnergy);
     setPhase('building');
@@ -99,7 +115,6 @@ export default function PrereleasePage() {
   function startBattle() {
     if (!activeSet || buildingDeck.length === 0) return;
 
-    // Build AI deck from a random unlocked starter
     const availableDecks = getAvailableAIDecks(collection, isSetUnlocked);
     const aiDeckDef = availableDecks[Math.floor(Math.random() * availableDecks.length)];
     const aiDeck = aiDeckDef.cardIds
@@ -107,8 +122,6 @@ export default function PrereleasePage() {
       .filter(Boolean) as CardData[];
 
     const playerDeck = [...buildingDeck];
-
-    // Ensure player deck has at least 1 basic
     const hasBasic = playerDeck.some(c => isBasicPokemon(c));
     if (!hasBasic) {
       const fallback = BROWSE_CARDS.find(c => isBasicPokemon(c));
@@ -129,12 +142,20 @@ export default function PrereleasePage() {
             <Link href="/" className="text-sm text-gray-400 hover:text-white">← Home</Link>
           </div>
           <p className="text-sm text-gray-400">
-            Open 10 packs from the upcoming set and battle with your sealed pool!
+            Open 10 packs and battle with your sealed pool!
           </p>
           <div className="space-y-3">
             {prereleaseInvites.map(setName => {
               const entry = SET_PROGRESSION.find(s => s.name === setName);
-              const hasCards = ALL_CARDS.some(c => c.set === setName);
+              const mixed = MIXED_PACK_SETS[setName];
+              const hasCards = mixed
+                ? mixed.every(({ set }) => ALL_CARDS.some(c => c.set === set))
+                : ALL_CARDS.some(c => c.set === setName);
+
+              const packDescription = mixed
+                ? mixed.map(({ set, count }) => `${count}× ${set}`).join(' + ')
+                : `10× ${setName}`;
+
               return (
                 <div key={setName} className="bg-gray-800 border border-yellow-600/50 rounded-xl p-4 space-y-3">
                   <div>
@@ -143,13 +164,14 @@ export default function PrereleasePage() {
                       <span className="text-[10px] bg-yellow-500 text-black font-bold px-1.5 py-0.5 rounded">PRERELEASE</span>
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      {entry?.prerequisite ? `Unlocked by completing ${entry.prerequisite}` : ''}
+                      {entry?.prerequisite ? `Follows ${entry.prerequisite}` : 'First prerelease event'}
                     </p>
                   </div>
                   <ul className="text-sm text-gray-300 space-y-0.5">
-                    <li>• Receive 10 booster packs from {setName}</li>
+                    <li>• Receive {packDescription}</li>
                     <li>• Build a 40-card sealed deck from your pool</li>
                     <li>• Battle an AI opponent</li>
+                    <li>• Unlocks {setName} boosters &amp; theme decks in Shop</li>
                   </ul>
                   <button
                     onClick={() => openPacks(setName)}
@@ -169,21 +191,27 @@ export default function PrereleasePage() {
 
   // ── Pack opening result ────────────────────────────────────────────────────
   if (phase === 'opening') {
+    const mixedInfo = activeSet ? MIXED_PACK_SETS[activeSet] : null;
+    const packLabel = mixedInfo
+      ? mixedInfo.map(({ set, count }) => `${count}× ${set}`).join(' + ')
+      : `10 packs`;
+
     return (
       <div className="min-h-screen bg-gray-950 text-white p-4">
         <div className="max-w-2xl mx-auto space-y-4 pt-4">
           <h1 className="text-xl font-black text-yellow-400">
-            {activeSet} Prerelease — Your 5 Packs
+            {activeSet} Prerelease — {packLabel}
           </h1>
-          <p className="text-sm text-gray-400">{openedCards.length} cards received. These have been added to your collection.</p>
-          <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
+          <p className="text-sm text-gray-400">{openedCards.length} cards received. Added to your collection. {activeSet} boosters &amp; theme decks are now unlocked!</p>
+          <div className="grid grid-cols-5 sm:grid-cols-7 gap-1.5">
             {openedCards.map((card, i) => (
               <CardImage key={i} card={card} small />
             ))}
           </div>
           <div className="bg-gray-800 rounded-xl p-4 text-sm text-gray-300 space-y-1">
             <p className="font-bold text-white">Build your sealed deck:</p>
-            <p>• Choose which pulled cards to include</p>
+            <p>• Click cards from your pool to add them</p>
+            <p>• Cards can be sorted by number, type, or name</p>
             <p>• Add unlimited basic energy of any type</p>
             <p>• Aim for 40 cards (min. 20 to battle)</p>
           </div>
@@ -203,14 +231,12 @@ export default function PrereleasePage() {
   const deckHasBasic = buildingDeck.some(c => isBasicPokemon(c));
   const canStart = deckCount >= 20 && deckHasBasic;
 
-  // Count how many of each opened card are in the deck
   function countInDeck(card: CardData) {
     return buildingDeck.filter(c => c.id === card.id).length;
   }
   function countInPool(card: CardData) {
     return openedCards.filter(c => c.id === card.id).length;
   }
-
   function addCardToDeck(card: CardData) {
     if (buildingDeck.length >= 60) return;
     setBuildingDeck(prev => [...prev, card]);
@@ -232,11 +258,46 @@ export default function PrereleasePage() {
     if (idx >= 0) setBuildingDeck(prev => { const a = [...prev]; a.splice(idx, 1); return a; });
   }
 
-  // Unique pool cards for display
-  const poolCards = openedCards.filter((card, i, arr) => arr.findIndex(c => c.id === card.id) === i);
-  const nonEnergyPool = poolCards.filter(c => c.supertype !== 'Energy');
+  // Unique pool non-energy cards, sorted by current sortMode
+  const nonEnergyPool = useMemo(() => {
+    const unique = openedCards.filter((card, i, arr) =>
+      arr.findIndex(c => c.id === card.id) === i && card.supertype !== 'Energy',
+    );
+    return [...unique].sort((a, b) => {
+      if (sortMode === 'number') {
+        // Sort by set name first (so mixed-set pools group by set), then card number
+        const setOrder = a.set.localeCompare(b.set);
+        if (setOrder !== 0) return setOrder;
+        return (parseInt(a.number) || 0) - (parseInt(b.number) || 0);
+      }
+      if (sortMode === 'type') {
+        const ta = a.supertype === 'Pokémon' ? (a.types?.[0] ?? '') : a.supertype;
+        const tb = b.supertype === 'Pokémon' ? (b.types?.[0] ?? '') : b.supertype;
+        if (ta !== tb) return ta.localeCompare(tb);
+        return a.name.localeCompare(b.name);
+      }
+      // name
+      return a.name.localeCompare(b.name);
+    });
+  }, [openedCards, sortMode]);
 
-  // Count energy in deck by type
+  // Deck summary
+  const deckByName: Record<string, { card: CardData; count: number }> = {};
+  for (const c of buildingDeck) {
+    if (!deckByName[c.id]) deckByName[c.id] = { card: c, count: 0 };
+    deckByName[c.id].count++;
+  }
+  const deckEntries = Object.values(deckByName).sort((a, b) => {
+    const order = (c: CardData) =>
+      c.supertype === 'Pokémon' ? 0 : c.supertype === 'Trainer' ? 1 : 2;
+    if (order(a.card) !== order(b.card)) return order(a.card) - order(b.card);
+    // JP-style: sort by set then number within deck too
+    const setOrder = a.card.set.localeCompare(b.card.set);
+    if (setOrder !== 0) return setOrder;
+    return (parseInt(a.card.number) || 0) - (parseInt(b.card.number) || 0);
+  });
+
+  // Energy in deck
   const energyInDeck: Partial<Record<EnergyType, number>> = {};
   for (const c of buildingDeck) {
     if (c.supertype === 'Energy' && c.types[0]) {
@@ -245,20 +306,12 @@ export default function PrereleasePage() {
     }
   }
 
-  // Deck summary for display
-  const deckByName: Record<string, { card: CardData; count: number }> = {};
-  for (const c of buildingDeck) {
-    if (!deckByName[c.id]) deckByName[c.id] = { card: c, count: 0 };
-    deckByName[c.id].count++;
-  }
-  const deckEntries = Object.values(deckByName);
-
   return (
     <div className="min-h-screen bg-gray-950 text-white p-3">
       <div className="max-w-5xl mx-auto space-y-4">
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h1 className="text-xl font-black text-yellow-400">{activeSet} Prerelease — Build Deck</h1>
           <div className="flex items-center gap-3">
             <span className={`text-sm font-bold ${deckCount >= 40 ? 'text-green-400' : deckCount >= 20 ? 'text-yellow-400' : 'text-gray-400'}`}>
@@ -321,9 +374,27 @@ export default function PrereleasePage() {
 
             {/* Pool Cards */}
             <div className="bg-gray-800 rounded-xl p-3">
-              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                Your Pool ({openedCards.filter(c => c.supertype !== 'Energy').length} cards)
-              </h2>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Your Pool ({openedCards.filter(c => c.supertype !== 'Energy').length} cards)
+                </h2>
+                {/* Sort toggle */}
+                <div className="flex gap-1">
+                  {(['number', 'type', 'name'] as SortMode[]).map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setSortMode(m)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                        sortMode === m
+                          ? 'bg-yellow-500 text-black'
+                          : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                      }`}
+                    >
+                      {m === 'number' ? '#' : m === 'type' ? 'Type' : 'A-Z'}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-7 gap-1.5">
                 {nonEnergyPool.map(card => {
                   const inDeck = countInDeck(card);
@@ -334,13 +405,19 @@ export default function PrereleasePage() {
                       <button
                         onClick={() => !maxed ? addCardToDeck(card) : removeCardFromDeck(card)}
                         className={`w-full relative ${maxed ? 'opacity-40' : 'hover:ring-2 hover:ring-yellow-400'} rounded-lg overflow-hidden`}
-                        title={maxed ? `${card.name} (all copies in deck)` : `Add ${card.name}`}
+                        title={`${card.name} #${card.number} (${card.set})${maxed ? ' — all copies in deck' : ''}`}
                       >
                         <CardImage card={card} small />
                       </button>
                       {inDeck > 0 && (
                         <div className="absolute top-0.5 right-0.5 bg-yellow-500 text-black text-[10px] font-black rounded-full w-4 h-4 flex items-center justify-center leading-none">
                           {inDeck}
+                        </div>
+                      )}
+                      {/* Card number badge in set-number sort mode */}
+                      {sortMode === 'number' && (
+                        <div className="absolute bottom-0.5 left-0.5 bg-black/70 text-white text-[8px] px-0.5 rounded leading-tight">
+                          #{card.number}
                         </div>
                       )}
                     </div>
@@ -366,38 +443,26 @@ export default function PrereleasePage() {
               {deckEntries.length === 0 && (
                 <p className="text-xs text-gray-600 text-center py-4">Click pool cards or energy buttons to add</p>
               )}
-              {deckEntries
-                .sort((a, b) => {
-                  // Sort: Pokémon first, then Trainers, then Energy
-                  const order = { 'Pokémon': 0, 'Trainer': 1, 'Energy': 2 };
-                  const ao = order[a.card.supertype as keyof typeof order] ?? 3;
-                  const bo = order[b.card.supertype as keyof typeof order] ?? 3;
-                  if (ao !== bo) return ao - bo;
-                  return a.card.name.localeCompare(b.card.name);
-                })
-                .map(({ card, count }) => (
-                  <div key={card.id} className="flex items-center justify-between bg-gray-700/50 rounded px-2 py-1">
-                    <span className="text-xs truncate flex-1">{card.name}</span>
-                    <div className="flex items-center gap-1 ml-1">
-                      <span className="text-xs text-gray-400 font-bold">×{count}</span>
-                      <button
-                        onClick={() => removeCardFromDeck(card)}
-                        className="text-gray-500 hover:text-red-400 text-xs w-4 h-4 flex items-center justify-center"
-                        title="Remove one"
-                      >
-                        −
-                      </button>
-                      <button
-                        onClick={() => addCardToDeck(card)}
-                        className="text-gray-500 hover:text-green-400 text-xs w-4 h-4 flex items-center justify-center"
-                        title="Add one more"
-                      >
-                        +
-                      </button>
-                    </div>
+              {deckEntries.map(({ card, count }) => (
+                <div key={card.id} className="flex items-center justify-between bg-gray-700/50 rounded px-2 py-1">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs truncate block">{card.name}</span>
+                    <span className="text-[9px] text-gray-500">#{card.number} {card.set}</span>
                   </div>
-                ))
-              }
+                  <div className="flex items-center gap-1 ml-1">
+                    <span className="text-xs text-gray-400 font-bold">×{count}</span>
+                    <button
+                      onClick={() => removeCardFromDeck(card)}
+                      className="text-gray-500 hover:text-red-400 text-xs w-4 h-4 flex items-center justify-center"
+                    >−</button>
+                    <button
+                      onClick={() => addCardToDeck(card)}
+                      disabled={countInDeck(card) >= countInPool(card)}
+                      className="text-gray-500 hover:text-green-400 disabled:opacity-30 text-xs w-4 h-4 flex items-center justify-center"
+                    >+</button>
+                  </div>
+                </div>
+              ))}
             </div>
             <button
               onClick={startBattle}

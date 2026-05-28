@@ -85,6 +85,14 @@ function saveUnopenedPacks(userId: string, p: Record<string, number>) {
   try { localStorage.setItem(unopenedPacksKey(userId), JSON.stringify(p)); } catch {}
 }
 
+function completedPrereleaseKey(userId: string) { return `pokemon-tcg-prerelease-done-${userId}`; }
+function loadCompletedPrereleases(userId: string): string[] {
+  try { const r = localStorage.getItem(completedPrereleaseKey(userId)); return r ? JSON.parse(r) : []; } catch { return []; }
+}
+function saveCompletedPrereleases(userId: string, sets: string[]) {
+  try { localStorage.setItem(completedPrereleaseKey(userId), JSON.stringify(sets)); } catch {}
+}
+
 function onboardingKey(userId: string) { return `pokemon-tcg-onboarding-${userId}`; }
 function loadOnboarding(userId: string): { step: number | null; promoCardId: string | null } {
   try { const r = localStorage.getItem(onboardingKey(userId)); return r ? JSON.parse(r) : { step: null, promoCardId: null }; } catch { return { step: null, promoCardId: null }; }
@@ -145,6 +153,7 @@ interface AuthStore {
   packVouchers: number;               // free booster pack vouchers from level-ups
   pendingLevelUp: { level: number; reward: LevelReward; cardId?: string } | null;
   unopenedPacks: Record<string, number>;
+  completedPrereleases: string[];       // set names whose prerelease has been played
   onboardingStep: number | null;
   onboardingPromoCardId: string | null;
   init: () => Promise<void>;
@@ -171,6 +180,7 @@ interface AuthStore {
   checkMilestones: () => void;
   redeemVoucher: (setName: string) => void;
   usePrereleaseInvite: (setName: string) => void;
+  addCompletedPrerelease: (setName: string) => void;
   dismissLevelUp: () => void;
   usePackVoucher: () => void;
   addUnopenedPacks: (setName: string, count: number) => void;
@@ -192,6 +202,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   packVouchers: 0,
   pendingLevelUp: null,
   unopenedPacks: {},
+  completedPrereleases: [],
   onboardingStep: null,
   onboardingPromoCardId: null,
   dailyBonusPending: false,
@@ -213,6 +224,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         prereleaseInvites: loadPrereleaseInvites(LOCAL_GUEST_ID),
         packVouchers: loadPackVouchers(LOCAL_GUEST_ID),
         unopenedPacks: loadUnopenedPacks(LOCAL_GUEST_ID),
+        completedPrereleases: loadCompletedPrereleases(LOCAL_GUEST_ID),
         onboardingStep: guestOnb.step,
         onboardingPromoCardId: guestOnb.promoCardId,
       });
@@ -255,6 +267,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
             prereleaseInvites: loadPrereleaseInvites(u.id),
             packVouchers: loadPackVouchers(u.id),
             unopenedPacks: loadUnopenedPacks(u.id),
+            completedPrereleases: loadCompletedPrereleases(u.id),
             onboardingStep: authOnb.step,
             onboardingPromoCardId: authOnb.promoCardId,
           });
@@ -640,6 +653,16 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ prereleaseInvites: updated });
   },
 
+  addCompletedPrerelease: (setName: string) => {
+    const { user, isLocalGuest, completedPrereleases } = get();
+    if (!user) return;
+    if (completedPrereleases.includes(setName)) return;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    const updated = [...completedPrereleases, setName];
+    saveCompletedPrereleases(storageId, updated);
+    set({ completedPrereleases: updated });
+  },
+
   addEncountered: (cardIds: string[]) => {
     const { user, encountered } = get();
     if (!user) return;
@@ -673,15 +696,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       } catch {}
     }
 
-    // 3 unopened Base Set packs (shown in onboarding step 2)
-    const newUP = { ...get().unopenedPacks, 'Base': (get().unopenedPacks['Base'] ?? 0) + 3 };
-    saveUnopenedPacks(storageId, newUP);
-    set({ unopenedPacks: newUP });
-
-    // 1 theme deck voucher (shown in onboarding step 4)
-    const newVouchers = [...get().freeVouchers, 'any'];
-    saveVouchers(storageId, newVouchers);
-    set({ freeVouchers: newVouchers });
+    // Base Set prerelease invite (shown in onboarding step 2)
+    const newInvites = [...get().prereleaseInvites, 'Base'];
+    savePrereleaseInvites(storageId, newInvites);
+    set({ prereleaseInvites: newInvites });
 
     // Starting promo is always Wizards Black Star Promo #1 — Pikachu
     // NOT added to collection yet; deferred to onboarding step 3
@@ -716,7 +734,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     if (isLocalGuest) {
       const reset: Profile = { ...makeGuestProfile(), display_name: profile?.display_name ?? 'Trainer' };
       saveLocalGuest(reset);
-      set({ profile: reset, collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [], decks: [], unopenedPacks: {}, onboardingStep: null, onboardingPromoCardId: null });
+      const storageIdReset = LOCAL_GUEST_ID;
+      saveCompletedPrereleases(storageIdReset, []);
+      set({ profile: reset, collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [], decks: [], unopenedPacks: {}, completedPrereleases: [], onboardingStep: null, onboardingPromoCardId: null });
       get().ensureStarterDeck();
       return;
     }
@@ -727,7 +747,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     await supabase.from('profiles').update({
       xp: 0, level: 1, credits: STARTING_CREDITS, wins: 0, losses: 0, elo: 1000,
     }).eq('id', user.id);
-    set({ collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [], decks: [], unopenedPacks: {}, onboardingStep: null, onboardingPromoCardId: null });
+    saveCompletedPrereleases(user.id, []);
+    set({ collection: {}, encountered: new Set(), freeVouchers: [], packVouchers: 0, prereleaseInvites: [], decks: [], unopenedPacks: {}, completedPrereleases: [], onboardingStep: null, onboardingPromoCardId: null });
     await get().refreshProfile();
     get().ensureStarterDeck();
   },

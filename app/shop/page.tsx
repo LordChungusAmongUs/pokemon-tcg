@@ -53,7 +53,7 @@ export default function ShopPage() {
 
   function openOnePack(setName: string) {
     if (!consumeOnePack(setName)) return;
-    const ids = generatePackCards(setName);
+    const ids = generatePackCards(setName, collection);
     const cards = ids.map(id => ALL_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
     addToCollection(ids);
     setPackResult(cards);
@@ -64,9 +64,13 @@ export default function ShopPage() {
     const count = unopenedPacks[setName] ?? 0;
     if (count === 0) return;
     const allIds: string[] = [];
+    // Maintain a running temp collection so balance tracks across packs opened this session
+    const tempCollection: Record<string, number> = { ...collection };
     for (let i = 0; i < count; i++) {
       consumeOnePack(setName);
-      allIds.push(...generatePackCards(setName));
+      const packIds = generatePackCards(setName, tempCollection);
+      for (const id of packIds) tempCollection[id] = (tempCollection[id] ?? 0) + 1;
+      allIds.push(...packIds);
     }
     const cards = allIds.map(id => ALL_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
     addToCollection(allIds);

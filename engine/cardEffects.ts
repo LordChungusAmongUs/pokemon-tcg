@@ -677,6 +677,16 @@ export function handleTrainerEffect(
     return after;
   }
 
+  // ── Bill's Teleporter (Neo Genesis) — flip coin; heads = draw 4 cards ──────
+  if (name === "bill's teleporter" || id === 'neo1-91') {
+    const heads = flip();
+    if (heads) {
+      for (let i = 0; i < 4; i++) after = drawCard(after, playerId);
+      return logMsg(after, `${playerName} plays Bill's Teleporter — Heads! Draws 4 cards.`);
+    }
+    return logMsg(after, `${playerName} plays Bill's Teleporter — Tails! No effect.`);
+  }
+
   // ── Double Colorless Energy (shouldn't reach here — handled in attachEnergy) ──
 
   return after; // unimplemented trainers just get discarded with no effect

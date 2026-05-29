@@ -156,14 +156,39 @@ export function rarityWeight(rarity: string): RarityWeight {
 
 // Returns 9 cards: 1 rare slot, 3 uncommon, 5 common
 // Rare slot is 2:1 regular rare vs holo/super rare
-export function pickPackCards(setCards: { id: string; rarity: string }[]): string[] {
+//
+// collection (optional): combined persistent + session counts used for balance.
+// Gap limits per rarity tier: Holo=2, Rare=3, Uncommon=4, Common=6.
+// A card is only eligible if count < min_count_in_tier + gap_limit.
+// This ensures no card in a tier runs ahead of the rest by more than the limit.
+export function pickPackCards(
+  setCards: { id: string; rarity: string }[],
+  collection?: Record<string, number>,
+): string[] {
   if (setCards.length === 0) return [];
+
+  const col = collection ?? {};
+
+  // Balance helper: filter pool so no card leads its tier minimum by more than `limit`
+  function bal(pool: { id: string; rarity: string }[], limit: number): typeof pool {
+    if (pool.length === 0) return pool;
+    const minCount = pool.reduce((m, c) => Math.min(m, col[c.id] ?? 0), Infinity);
+    const threshold = (isFinite(minCount) ? minCount : 0) + limit;
+    const eligible = pool.filter(c => (col[c.id] ?? 0) < threshold);
+    return eligible.length > 0 ? eligible : pool; // always fall back so pool never empties
+  }
 
   const allRares     = setCards.filter(c => rarityWeight(c.rarity) === 'Rare');
   const holos        = allRares.filter(c => c.rarity.toLowerCase() !== 'rare');
   const regularRares = allRares.filter(c => c.rarity.toLowerCase() === 'rare');
   const uncommons    = setCards.filter(c => rarityWeight(c.rarity) === 'Uncommon');
   const commons      = setCards.filter(c => rarityWeight(c.rarity) === 'Common');
+
+  // Apply balance filtering per rarity tier
+  const balHolos        = bal(holos, 2);
+  const balRegularRares = bal(regularRares, 3);
+  const balUncommons    = bal(uncommons, 4);
+  const balCommons      = bal(commons, 6);
 
   const rnd = (pool: { id: string }[]): string =>
     pool[Math.floor(Math.random() * pool.length)].id;
@@ -183,32 +208,43 @@ export function pickPackCards(setCards: { id: string; rarity: string }[]): strin
   // Rare slot: 1/3 holo, 2/3 regular rare; fall back gracefully if one pool is empty
   let rareId: string;
   if (allRares.length === 0) {
-    rareId = rnd(uncommons.length > 0 ? uncommons : setCards);
+    rareId = rnd(balUncommons.length > 0 ? balUncommons : setCards);
   } else if (holos.length === 0 || regularRares.length === 0) {
-    rareId = rnd(allRares);
+    const balAll = [...balHolos, ...balRegularRares];
+    rareId = rnd(balAll.length > 0 ? balAll : allRares);
   } else {
-    rareId = Math.random() < 1 / 3 ? rnd(holos) : rnd(regularRares);
+    rareId = Math.random() < 1 / 3 ? rnd(balHolos) : rnd(balRegularRares);
   }
 
   return [
     rareId,
-    ...pickN(uncommons, setCards, 3),
-    ...pickN(commons, setCards, 5),
+    ...pickN(balUncommons, setCards, 3),
+    ...pickN(balCommons, setCards, 5),
   ];
 }
 
 // Generate all card IDs for one booster pack of a given set (9 non-energy + 2 energy)
-export function generatePackCards(setName: string): string[] {
+// collection: combined persistent + session counts for balance (gap limit 10 for energy)
+export function generatePackCards(setName: string, collection?: Record<string, number>): string[] {
   const allSetCards = ALL_CARDS.filter(c => c.set === setName);
   const basicEnergyPool = allSetCards.filter(c => c.supertype === 'Energy' && !c.rarity);
   const setCards = allSetCards
     .filter(c => !basicEnergyPool.some(e => e.id === c.id))
     .map(c => ({ id: c.id, rarity: c.rarity || 'Common' }));
   if (setCards.length === 0) return [];
-  const ids = [...pickPackCards(setCards)];
+
+  const col = collection ?? {};
+  const ids = [...pickPackCards(setCards, collection)];
+
   if (basicEnergyPool.length > 0) {
-    const pickEnergy = () => basicEnergyPool[Math.floor(Math.random() * basicEnergyPool.length)].id;
+    // Balance energy: no energy type more than min_energy_count + 10
+    const minEnergyCount = basicEnergyPool.reduce((m, c) => Math.min(m, col[c.id] ?? 0), Infinity);
+    const energyThreshold = (isFinite(minEnergyCount) ? minEnergyCount : 0) + 10;
+    const balEnergy = basicEnergyPool.filter(c => (col[c.id] ?? 0) < energyThreshold);
+    const energyPool = balEnergy.length > 0 ? balEnergy : basicEnergyPool;
+    const pickEnergy = () => energyPool[Math.floor(Math.random() * energyPool.length)].id;
     ids.push(pickEnergy(), pickEnergy());
   }
+
   return ids;
 }

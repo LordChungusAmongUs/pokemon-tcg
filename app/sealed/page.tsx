@@ -46,9 +46,12 @@ export default function SealedPage() {
 
   function openPacks(setName: string) {
     const allIds: string[] = [];
+    const tempCollection: Record<string, number> = { ...collection };
     for (let i = 0; i < REQUIRED_PACKS; i++) {
       consumeOnePack(setName);
-      allIds.push(...generatePackCards(setName));
+      const packIds = generatePackCards(setName, tempCollection);
+      for (const id of packIds) tempCollection[id] = (tempCollection[id] ?? 0) + 1;
+      allIds.push(...packIds);
     }
     addToCollection(allIds); // keep all opened cards
     setPool(allIds);

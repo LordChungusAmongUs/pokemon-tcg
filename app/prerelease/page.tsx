@@ -141,6 +141,8 @@ export default function PrereleasePage() {
   // ── Open packs for a given set (supports mixed-set pools) ───────────────────
   function openPacks(setName: string) {
     const allIds: string[] = [];
+    // Running temp collection so balance applies across all packs opened in this session
+    const tempCollection: Record<string, number> = { ...collection };
 
     const mixedSets = MIXED_PACK_SETS[setName];
     const packGroups = mixedSets ?? [{ set: setName, count: 10 }];
@@ -160,7 +162,11 @@ export default function PrereleasePage() {
           : null;
 
       for (let i = 0; i < count; i++) {
-        if (packableCards.length > 0) allIds.push(...pickPackCards(packableCards));
+        if (packableCards.length > 0) {
+          const packIds = pickPackCards(packableCards, tempCollection);
+          for (const id of packIds) tempCollection[id] = (tempCollection[id] ?? 0) + 1;
+          allIds.push(...packIds);
+        }
         const e1 = pickEnergy(); if (e1) allIds.push(e1);
         const e2 = pickEnergy(); if (e2) allIds.push(e2);
       }

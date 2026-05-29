@@ -45,7 +45,7 @@ function packOpener(packIndex: number): number {
 
 export default function DraftPage() {
   const router = useRouter();
-  const { user, unopenedPacks, consumeOnePack, addToCollection } = useAuthStore();
+  const { user, unopenedPacks, consumeOnePack, addToCollection, collection } = useAuthStore();
   const { startGame } = useGameStore();
 
   const [phase, setPhase] = useState<DraftPhase>('setup');
@@ -106,11 +106,13 @@ export default function DraftPage() {
     }
     for (let i = 0; i < TOTAL_PACKS; i++) consumeOnePack(setName);
 
-    // Generate all packs
+    // Generate all packs with balance tracking across the draft session
     const packs: string[][] = [];
+    const tempCollection: Record<string, number> = { ...collection };
     for (let i = 0; i < TOTAL_PACKS; i++) {
+      const allIds = generatePackCards(setName, tempCollection);
+      for (const id of allIds) tempCollection[id] = (tempCollection[id] ?? 0) + 1;
       // Only non-energy cards go into the draft pool
-      const allIds = generatePackCards(setName);
       const nonEnergy = allIds.filter(id => {
         const c = ALL_CARDS.find(x => x.id === id);
         return c && !(c.supertype === 'Energy' && !c.rarity);

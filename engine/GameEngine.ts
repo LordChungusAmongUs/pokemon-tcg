@@ -1567,6 +1567,10 @@ export function evolve(state: GameState, handUid: string, targetUid: string): Ga
   const evolveTarget = (pokemon: InPlayPokemon | null): InPlayPokemon | null => {
     if (!pokemon || pokemon.uid !== targetUid) return pokemon;
     if (pokemon.card.name !== evoCard.card.evolvesFrom) return pokemon;
+    // Can never evolve on the very first turn of the game (turn 1 = P1's first turn).
+    // Setup Pokémon have turnPlayed:0, so the same-turn guard below won't catch them.
+    if (state.turn === 1) return pokemon;
+    // Can't evolve a Pokémon the same turn it was played
     if (pokemon.turnPlayed === state.turn) return pokemon;
 
     const damageTaken = Math.min(pokemon.damageTaken, (evoCard.card.hp ?? 0) - 1);

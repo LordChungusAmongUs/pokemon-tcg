@@ -121,7 +121,8 @@ export type PendingTrainer =
   | { type: 'recycle' }
   | { type: 'computer-search' }
   | { type: 'computer-search-second'; firstUid: string }
-  | { type: 'computer-search-deck'; firstUid: string; secondUid: string };
+  | { type: 'computer-search-deck'; firstUid: string; secondUid: string }
+  | { type: 'bosss-way'; cardUids: string[] };
 
 export interface GameState {
   phase: GamePhase;

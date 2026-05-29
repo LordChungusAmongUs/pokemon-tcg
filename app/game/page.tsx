@@ -114,7 +114,7 @@ export default function GamePage() {
     resolvePokemonTraderAction, resolveMaintenanceAction, resolveItemFinderAction, resolveComputerSearchAction, resolveNightlyGarbageRunAction,
     resolvePokemonBreederAction, resolveRecycleAction, confirmRetreatAction,
     resolveAttackDiscardAction, cancelAttackDiscardAction,
-    resolveSendOutAction,
+    resolveSendOutAction, resolveBossWayAction,
   } = useGameStore();
 
   const [detailCard, setDetailCard] = useState<CardData | null>(null);
@@ -135,6 +135,7 @@ export default function GamePage() {
   const [gameRewards, setGameRewards] = useState<{ credits: number; pack?: string; prizesTaken: number; tier: number } | null>(null);
   const [passModal, setPassModal] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [discardViewSide, setDiscardViewSide] = useState<'player1' | 'player2' | null>(null);
   const [coinFlipDisplay, setCoinFlipDisplay] = useState<boolean[] | null>(null);
   const pendingFlips = useRef<boolean[]>([]);
   const coinFlipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1436,6 +1437,72 @@ export default function GamePage() {
         );
       })()}
 
+      {/* ── The Boss's Way: choose a Dark Evolution from deck ── */}
+      {game.pendingTrainer?.type === 'bosss-way' && (() => {
+        const { cardUids } = game.pendingTrainer;
+        const choices = cardUids
+          .map(uid => p1.deck.find(c => c.uid === uid))
+          .filter(Boolean) as import('@/engine/GameState').CardInstance[];
+        return (
+          <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-900 rounded-2xl p-5 max-w-lg w-full space-y-3">
+              <h3 className="font-bold text-purple-400 text-center">🌑 The Boss&apos;s Way</h3>
+              <p className="text-sm text-gray-400 text-center">
+                Choose a Dark Evolution card from your deck to put into your hand:
+              </p>
+              <div className="grid grid-cols-4 gap-2 max-h-72 overflow-y-auto">
+                {choices.map(ci => (
+                  <div key={ci.uid}
+                    className="flex flex-col items-center gap-1 cursor-pointer hover:opacity-80"
+                    onClick={() => resolveBossWayAction(ci.uid)}
+                  >
+                    <CardImage card={ci.card} small />
+                    <span className="text-[9px] text-gray-300 text-center truncate w-full">{ci.card.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Discard pile viewer ────────────────────────────── */}
+      {discardViewSide && (() => {
+        const side = discardViewSide === 'player1' ? p1 : p2;
+        const label = discardViewSide === 'player1' ? 'Your' : `${p2.name}'s`;
+        return (
+          <div
+            className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4"
+            onClick={() => setDiscardViewSide(null)}
+          >
+            <div
+              className="bg-gray-900 rounded-2xl p-5 max-w-lg w-full max-h-[85vh] flex flex-col space-y-3"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-gray-300">{label} Discard Pile ({side.discard.length})</h3>
+                <button onClick={() => setDiscardViewSide(null)} className="text-gray-500 hover:text-white text-xl leading-none">×</button>
+              </div>
+              {side.discard.length === 0
+                ? <p className="text-gray-600 text-sm text-center py-4">Empty</p>
+                : (
+                  <div className="overflow-y-auto flex-1 min-h-0">
+                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                      {[...side.discard].reverse().map((ci, i) => (
+                        <div key={ci.uid + i} className="flex flex-col items-center gap-1">
+                          <CardImage card={ci.card} small />
+                          <span className="text-[9px] text-gray-400 text-center truncate w-full">{ci.card.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              }
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Retreat energy selection ───────────────────────── */}
       {game.pendingRetreat && (() => {
         const { cost } = game.pendingRetreat;
@@ -1787,6 +1854,13 @@ export default function GamePage() {
             <span>✋{p2.hand.length}</span>
             <span>🎴{p2.deck.length}</span>
             <span>🏆{p2.prizes.length}</span>
+            <button
+              onClick={() => setDiscardViewSide('player2')}
+              className="text-gray-400 hover:text-white underline decoration-dotted"
+              title="View opponent discard pile"
+            >
+              🗑{p2.discard.length}
+            </button>
             {aiRunning && <span className="text-yellow-400 animate-pulse">thinking…</span>}
           </div>
         </div>
@@ -1888,6 +1962,13 @@ export default function GamePage() {
           <span className="font-bold text-yellow-300 truncate max-w-20">{p1.name}</span>
           <CardBack small count={p1.prizes.length} className="w-6 h-8 text-xs" />
           <span>🎴{p1.deck.length}</span>
+          <button
+            onClick={() => setDiscardViewSide('player1')}
+            className="text-gray-400 hover:text-white text-xs underline decoration-dotted"
+            title="View your discard pile"
+          >
+            🗑{p1.discard.length}
+          </button>
         </div>
         {isP1Turn && game.phase !== 'gameover' && (
           <div className="flex gap-2">

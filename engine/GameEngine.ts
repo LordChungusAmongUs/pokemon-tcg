@@ -1180,6 +1180,18 @@ export function playTrainer(state: GameState, handUid: string): GameState {
     return { ...next, pendingTrainer: { type: 'pokemon-breeder' } };
   }
 
+  // ── The Boss's Way: search deck for evolution card with "dark" in its name ─
+  if (name === "the boss's way" || id === 'base5-73') {
+    const p = next[active];
+    const eligible = p.deck.filter(c =>
+      c.card.evolvesFrom !== null && c.card.name.toLowerCase().includes('dark')
+    );
+    if (eligible.length === 0) {
+      return log(next, `${p.name} plays The Boss's Way — no Dark Evolution cards in deck.`);
+    }
+    return { ...next, pendingTrainer: { type: 'bosss-way', cardUids: eligible.map(c => c.uid) } };
+  }
+
   // ── Nightly Garbage Run: player picks up to 3 from discard ────────────────
   if (name === 'nightly garbage run' || id === 'base5-77') {
     const p = next[active];
@@ -1415,6 +1427,21 @@ export function resolveComputerSearch(state: GameState, uid: string): GameState 
   }
 
   return { ...state, pendingTrainer: undefined };
+}
+
+// ─── The Boss's Way resolution ───────────────────────────────────────────────
+
+export function resolveBossWay(state: GameState, uid: string): GameState {
+  if (state.pendingTrainer?.type !== 'bosss-way') return state;
+  const active = state.activePlayer;
+  const player = state[active];
+  const deckCard = player.deck.find(c => c.uid === uid);
+  if (!deckCard) return { ...state, pendingTrainer: undefined };
+  const newDeck = shuffle(player.deck.filter(c => c.uid !== uid));
+  return log(
+    { ...state, pendingTrainer: undefined, [active]: { ...player, hand: [...player.hand, deckCard], deck: newDeck } },
+    `${player.name} uses The Boss's Way to find ${deckCard.card.name}!`,
+  );
 }
 
 // ─── Nightly Garbage Run resolution ─────────────────────────────────────────

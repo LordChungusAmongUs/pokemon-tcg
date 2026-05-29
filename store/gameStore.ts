@@ -11,7 +11,7 @@ import {
   resolvePokemonTrader, resolveMaintenance, resolveItemFinder, resolveNightlyGarbageRun,
   resolvePokemonBreeder, resolveRecycle, confirmRetreat, resolveComputerSearch,
   resolveAttackDiscard, cancelAttackDiscard,
-  resolveSendOut,
+  resolveSendOut, resolveBossWay,
 } from '@/engine/GameEngine';
 import type { EnergyType } from '@/engine/GameState';
 import { XP_REWARDS } from '@/lib/progression';
@@ -62,6 +62,7 @@ interface GameStore {
   resolveMaintenanceAction: (uid: string) => void;
   resolveItemFinderAction: (uid: string) => void;
   resolveComputerSearchAction: (uid: string) => void;
+  resolveBossWayAction: (uid: string) => void;
   resolveNightlyGarbageRunAction: (uid: string | null) => void;
   resolvePokemonBreederAction: (uid: string) => void;
   resolveRecycleAction: (uid: string) => void;
@@ -195,6 +196,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   })),
   resolveComputerSearchAction: (uid) => set(s => ({
     game: s.game ? resolveComputerSearch(s.game, uid) : null,
+  })),
+  resolveBossWayAction: (uid) => set(s => ({
+    game: s.game ? resolveBossWay(s.game, uid) : null,
   })),
   resolveNightlyGarbageRunAction: (uid) => set(s => ({
     game: s.game ? resolveNightlyGarbageRun(s.game, uid) : null,

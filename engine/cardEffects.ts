@@ -598,6 +598,18 @@ export function handleTrainerEffect(
 
   // Recycle — intercepted in playTrainer for coin flip + player choice
 
+  // ── Sleep! (Team Rocket) — flip coin; heads = opponent active Asleep ────────
+  if (name === 'sleep!' || id === 'base5-79') {
+    const o = opp();
+    const heads = flip();
+    if (heads && o.active) {
+      const sleptActive = { ...o.active, statusCondition: 'Asleep' as StatusCondition };
+      return logMsg({ ...after, [oppId]: { ...o, active: sleptActive } },
+        `${playerName} plays Sleep! — Heads! ${o.active.card.name} is now Asleep!`);
+    }
+    return logMsg(after, `${playerName} plays Sleep! — Tails! No effect.`);
+  }
+
   // ── Rocket's Sneak Attack ─────────────────────────────────────────────────
   if (name === "rocket's sneak attack" || id === 'base5-16') {
     const o = opp();

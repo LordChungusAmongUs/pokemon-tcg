@@ -21,6 +21,8 @@ export default function ShopPage() {
   const [packLabel, setPackLabel] = useState('');
   const [openingSet, setOpeningSet] = useState<string | null>(null);
   const [previewSet, setPreviewSet] = useState<string | null>(null);
+  const [previewDeckId, setPreviewDeckId] = useState<string | null>(null);
+  const [previewSingleCard, setPreviewSingleCard] = useState<CardData | null>(null);
   const [tab, setTab] = useState<'packs' | 'decks' | 'singles'>('packs');
   const [singlesSearch, setSinglesSearch] = useState('');
   const [singlesSet, setSinglesSet] = useState('All');
@@ -145,6 +147,80 @@ export default function ShopPage() {
                       <span className="text-gray-600 text-xs">?</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Single card preview overlay */}
+      {previewSingleCard && (() => {
+        const card = previewSingleCard;
+        const cost = singleCost(card.rarity ?? '');
+        const canAfford = credits >= cost;
+        const owned = collection[card.id] ?? 0;
+        async function confirmBuy() {
+          if (!user) { alert('Sign in to buy cards!'); return; }
+          if (credits < cost) { alert('Not enough credits!'); return; }
+          await addCredits(-cost);
+          addToCollection([card.id]);
+          setPreviewSingleCard(null);
+        }
+        return (
+          <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4"
+            onClick={() => setPreviewSingleCard(null)}>
+            <div className="bg-gray-900 rounded-2xl p-5 max-w-xs w-full flex flex-col items-center gap-3"
+              onClick={e => e.stopPropagation()}>
+              <CardImage card={card} />
+              <div className="text-center">
+                <p className="font-bold text-white">{card.name}</p>
+                <p className="text-xs text-gray-400">{card.set} · {card.rarity}</p>
+                <p className="text-xs text-gray-500 mt-0.5">You own: {owned}</p>
+              </div>
+              <button
+                onClick={confirmBuy}
+                disabled={!canAfford || !user}
+                className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-bold rounded-xl"
+              >
+                {!user ? 'Sign in to buy' : !canAfford ? 'Not enough credits' : `Buy — ${cost} cr`}
+              </button>
+              <button onClick={() => setPreviewSingleCard(null)}
+                className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-xl">
+                Cancel
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Deck preview overlay */}
+      {previewDeckId && (() => {
+        const sd = STARTER_DECKS.find(d => d.id === previewDeckId);
+        if (!sd) return null;
+        const nonEnergyIds = sd.cardIds.filter(id => !id.startsWith('basic-'));
+        const cards = nonEnergyIds.map(id => ALL_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
+        // Count unique energy types in deck
+        const energyTypes = [...new Set(sd.cardIds.filter(id => id.startsWith('basic-energy-')).map(id => id.replace('basic-energy-', '')))];
+        return (
+          <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4"
+            onClick={() => setPreviewDeckId(null)}>
+            <div className="bg-gray-900 rounded-2xl p-5 max-w-2xl w-full max-h-[90vh] flex flex-col"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h2 className="text-lg font-bold text-yellow-400">{sd.name}</h2>
+                  <p className="text-xs text-gray-400">{sd.description}</p>
+                  {energyTypes.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-0.5">Energy: {energyTypes.join(', ')}</p>
+                  )}
+                </div>
+                <button onClick={() => setPreviewDeckId(null)}
+                  className="text-gray-400 hover:text-white text-2xl leading-none ml-4">×</button>
+              </div>
+              <div className="overflow-y-auto flex-1 min-h-0">
+                <div className="grid grid-cols-5 sm:grid-cols-6 gap-2">
+                  {cards.map((card, i) => <CardImage key={i} card={card} small />)}
                 </div>
               </div>
             </div>
@@ -354,15 +430,6 @@ export default function ShopPage() {
             .filter(c => !singlesSearch || c.name.toLowerCase().includes(singlesSearch.toLowerCase()));
           const singleSets = ['All', ...Array.from(new Set(singlesPool.map(c => c.set))).sort()];
 
-          async function buySingle(card: CardData) {
-            if (!user) { alert('Sign in to buy cards!'); return; }
-            const cost = singleCost(card.rarity ?? '');
-            if (credits < cost) { alert('Not enough credits!'); return; }
-            await addCredits(-cost);
-            addToCollection([card.id]);
-            alert(`Bought ${card.name}!`);
-          }
-
           return (
             <div className="space-y-3">
               <div className="flex gap-2">
@@ -388,7 +455,7 @@ export default function ShopPage() {
                   return (
                     <div key={card.id} className="flex flex-col items-center gap-1">
                       <div className="relative">
-                        <CardImage card={card} small dimmed={!canAfford} onClick={() => buySingle(card)} />
+                        <CardImage card={card} small dimmed={!canAfford} onClick={() => setPreviewSingleCard(card)} />
                         <span className="absolute bottom-1 left-0 right-0 text-center text-[10px] font-bold bg-black/70 text-yellow-300">
                           {cost}cr
                         </span>
@@ -504,7 +571,13 @@ export default function ShopPage() {
                     </div>
                     <div className="text-sm text-gray-400 mb-3">{starterDeck.description}</div>
                     <span className="text-xs text-gray-500">{starterDeck.cardIds.filter(id => !id.startsWith('basic-')).length} collectible cards</span>
-                    <div className="mt-2">{DeckButtons(starterDeck, true)}</div>
+                    <button
+                      onClick={() => setPreviewDeckId(starterDeck.id)}
+                      className="w-full mt-2 mb-1 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg"
+                    >
+                      👁 Preview Deck
+                    </button>
+                    <div className="mt-1">{DeckButtons(starterDeck, true)}</div>
                   </div>
                 </div>
               )}
@@ -546,7 +619,13 @@ export default function ShopPage() {
                             <div className="font-bold mb-0.5">{sd.name}</div>
                             <div className="text-xs text-gray-500 mb-1">{sd.type}</div>
                             <div className="text-sm text-gray-400 mb-2">{sd.description}</div>
-                            <div className="text-xs text-gray-500 mb-2">{sd.cardIds.filter(id => !id.startsWith('basic-')).length} collectible cards</div>
+                            <div className="text-xs text-gray-500 mb-1">{sd.cardIds.filter(id => !id.startsWith('basic-')).length} collectible cards</div>
+                            <button
+                              onClick={() => setPreviewDeckId(sd.id)}
+                              className="w-full mb-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg"
+                            >
+                              👁 Preview Deck
+                            </button>
                             {DeckButtons(sd, unlocked)}
                           </div>
                         );

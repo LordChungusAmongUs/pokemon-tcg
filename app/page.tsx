@@ -147,7 +147,7 @@ export default function HomePage() {
     let cards2: CardData[];
     let p2NameFinal: string;
     if (mode === 'vs-ai') {
-      const generated = generateAIDeck(aiTier);
+      const generated = generateAIDeck(aiTier, collection);
       cards2 = generated.cards;
       p2NameFinal = `CPU (${DIFFICULTY_LABELS[aiTier]})`;
     } else {

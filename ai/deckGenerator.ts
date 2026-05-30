@@ -1,11 +1,15 @@
 /**
  * AI Opponent Deck Generator
  * Generates balanced 60-card decks for 5 difficulty tiers.
- * Tier 1 = theme deck, Tier 5 = elite competitive.
+ * Only uses cards from sets the player has unlocked.
+ *
+ * Wizards Black Star Promos:
+ *   - Always uses #1-18 and #20-28 (early/Base-era promos)
+ *   - Uses all promos once Neo Genesis is unlocked
  */
 
 import type { CardData, EnergyType } from '@/engine/GameState';
-import { ALL_CARDS, BASIC_ENERGY_CARDS } from '@/lib/cardUtils';
+import { ALL_CARDS, BASIC_ENERGY_CARDS, isSetUnlocked } from '@/lib/cardUtils';
 import { STARTER_DECKS } from '@/lib/starterDecks';
 
 export type AIDifficulty = 1 | 2 | 3 | 4 | 5;
@@ -19,15 +23,33 @@ export interface GeneratedDeck {
   validationErrors: string[];
 }
 
-// ── WotC-era card pool ─────────────────────────────────────────────────────────
-const WOTC_SETS = new Set([
+// All WotC-era sets the AI may draw from
+const ALL_WOTC_SETS = [
   'Base', 'Jungle', 'Fossil', 'Team Rocket',
-  'Neo Genesis', 'Base Set 2', 'Gym Heroes', 'Gym Challenge',
-  'Neo Discovery', 'Neo Revelation', 'Neo Destiny',
-]);
+  'Gym Heroes', 'Gym Challenge',
+  'Neo Genesis', 'Neo Discovery', 'Neo Revelation', 'Neo Destiny',
+  'Base Set 2',
+  'Wizards Black Star Promos',
+];
 
-const POOL = ALL_CARDS.filter(c => WOTC_SETS.has(c.set));
-const BROWSE = [...POOL, ...BASIC_ENERGY_CARDS];
+// ── Session pool ───────────────────────────────────────────────────────────────
+// Rebuilt once per generateAIDeck call from the player's unlocked sets.
+let _pool: CardData[] = [];
+let _browse: CardData[] = [];
+
+function buildSession(collection: Record<string, number>) {
+  const neoUnlocked = isSetUnlocked('Neo Genesis', collection);
+  _pool = ALL_CARDS.filter(c => {
+    if (!ALL_WOTC_SETS.includes(c.set)) return false;
+    if (c.set === 'Wizards Black Star Promos') {
+      const num = parseInt(c.number ?? '0', 10);
+      // Without Neo Genesis: only early promos #1-18 and #20-28
+      return neoUnlocked || (num >= 1 && num <= 18) || (num >= 20 && num <= 28);
+    }
+    return isSetUnlocked(c.set, collection);
+  });
+  _browse = [..._pool, ...BASIC_ENERGY_CARDS];
+}
 
 // ── Key trainer IDs ────────────────────────────────────────────────────────────
 const TID = {
@@ -71,7 +93,7 @@ function rand(min: number, max: number): number {
 
 // ── Card helpers ───────────────────────────────────────────────────────────────
 function cardById(id: string): CardData | undefined {
-  return BROWSE.find(c => c.id === id);
+  return _browse.find(c => c.id === id);
 }
 
 function rpt(id: string, n: number): CardData[] {
@@ -99,14 +121,10 @@ interface EvolutionChain {
   depth: number; // 1=basic-only, 2=basic+stage1, 3=full line
 }
 
-let _chainCache: EvolutionChain[] | null = null;
-
 function getAllChains(): EvolutionChain[] {
-  if (_chainCache) return _chainCache;
-
-  const basics  = POOL.filter(c => c.supertype === 'Pokémon' && c.subtype === 'Basic');
-  const stage1s = POOL.filter(c => c.supertype === 'Pokémon' && c.subtype === 'Stage 1');
-  const stage2s = POOL.filter(c => c.supertype === 'Pokémon' && c.subtype === 'Stage 2');
+  const basics  = _pool.filter(c => c.supertype === 'Pokémon' && c.subtype === 'Basic');
+  const stage1s = _pool.filter(c => c.supertype === 'Pokémon' && c.subtype === 'Stage 1');
+  const stage2s = _pool.filter(c => c.supertype === 'Pokémon' && c.subtype === 'Stage 2');
 
   const chains: EvolutionChain[] = [];
 
@@ -131,7 +149,6 @@ function getAllChains(): EvolutionChain[] {
     }
   }
 
-  _chainCache = chains;
   return chains;
 }
 
@@ -232,12 +249,16 @@ function validateDeck(cards: CardData[]): string[] {
   return errors;
 }
 
-// ── Tier 1: Official theme decks ───────────────────────────────────────────────
-function generateTier1(): GeneratedDeck {
-  const eligible = STARTER_DECKS.filter(d => d.prerequisiteSet === null);
+// ── Tier 1: Official theme decks (only from unlocked sets) ─────────────────────
+function generateTier1(collection: Record<string, number>): GeneratedDeck {
+  // Only use theme decks from sets the player has unlocked
+  let eligible = STARTER_DECKS.filter(d => isSetUnlocked(d.requiredSet, collection));
+  if (eligible.length === 0) {
+    eligible = STARTER_DECKS.filter(d => d.requiredSet === 'Base');
+  }
   const chosen = pick(eligible);
   const cards = chosen.cardIds
-    .map(id => BROWSE.find(c => c.id === id))
+    .map(id => _browse.find(c => c.id === id))
     .filter(Boolean) as CardData[];
 
   return {
@@ -259,7 +280,7 @@ function generateTier2(): GeneratedDeck {
 
   // Grab random basics from multiple types (18–26)
   const pokemonTarget = rand(18, 26);
-  const pool = POOL.filter(
+  const pool = _pool.filter(
     c => c.supertype === 'Pokémon' && c.subtype === 'Basic' &&
     c.types?.some(t => chosenTypes.includes(t as EnergyType)),
   );
@@ -281,7 +302,7 @@ function generateTier2(): GeneratedDeck {
   }
 
   // Occasionally toss in a lone stage-1 (can't be evolved to — orphan card)
-  const stage1s = POOL.filter(c => c.supertype === 'Pokémon' && c.subtype === 'Stage 1');
+  const stage1s = _pool.filter(c => c.supertype === 'Pokémon' && c.subtype === 'Stage 1');
   if (Math.random() < 0.5 && deckPokemon.length < pokemonTarget) {
     const orphan = pick(stage1s.filter(s => s.types?.some(t => chosenTypes.includes(t as EnergyType))));
     if (orphan) {
@@ -375,7 +396,7 @@ function generateTier3(): GeneratedDeck {
 
   // Add 3–5 backup basics
   const backupPool = shuffle(
-    POOL.filter(
+    _pool.filter(
       c => c.supertype === 'Pokémon' && c.subtype === 'Basic' &&
         c.types?.some(t => chosenTypes.includes(t as EnergyType)) &&
         !usedNames.has(c.name),
@@ -470,7 +491,7 @@ function generateTier4(): GeneratedDeck {
 
   // 2–3 strong basics as support (good attackers, not needing evo)
   const strongBasics = shuffle(
-    POOL.filter(c =>
+    _pool.filter(c =>
       c.supertype === 'Pokémon' && c.subtype === 'Basic' &&
       c.types?.some(t => chosenTypes.includes(t as EnergyType)) &&
       !usedNames.has(c.name) &&
@@ -609,7 +630,7 @@ function generateTier5(): GeneratedDeck {
 
   // Step 4b: 2–4 standalone support basics
   const supportPool = shuffle(
-    POOL.filter(c =>
+    _pool.filter(c =>
       c.supertype === 'Pokémon' && c.subtype === 'Basic' &&
       c.types?.some(t => chosenTypes.includes(t as EnergyType)) &&
       !usedNames.has(c.name) &&
@@ -707,9 +728,27 @@ function padOrTrim(
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
-export function generateAIDeck(tier: AIDifficulty): GeneratedDeck {
+
+/**
+ * Generate an AI opponent deck for the given tier.
+ * @param collection  Player's collection — used to determine which sets are unlocked.
+ *                    Pass an empty object `{}` to use all sets (e.g. guest mode).
+ */
+export function generateAIDeck(
+  tier: AIDifficulty,
+  collection: Record<string, number> = {},
+): GeneratedDeck {
+  // Rebuild pool from the player's unlocked sets before generating
+  buildSession(collection);
+
+  // Fallback: if pool is somehow empty, use Base Set cards
+  if (_pool.length === 0) {
+    _pool = ALL_CARDS.filter(c => c.set === 'Base');
+    _browse = [..._pool, ...BASIC_ENERGY_CARDS];
+  }
+
   switch (tier) {
-    case 1: return generateTier1();
+    case 1: return generateTier1(collection);
     case 2: return generateTier2();
     case 3: return generateTier3();
     case 4: return generateTier4();

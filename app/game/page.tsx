@@ -114,7 +114,7 @@ export default function GamePage() {
     resolvePokemonTraderAction, resolveMaintenanceAction, resolveItemFinderAction, resolveComputerSearchAction, resolveNightlyGarbageRunAction,
     resolvePokemonBreederAction, resolveRecycleAction, confirmRetreatAction,
     resolveAttackDiscardAction, cancelAttackDiscardAction,
-    resolveSendOutAction, resolveBossWayAction,
+    resolveSendOutAction, resolveBossWayAction, resolveEnergyRetrievalAction,
   } = useGameStore();
 
   const [detailCard, setDetailCard] = useState<CardData | null>(null);
@@ -1461,6 +1461,63 @@ export default function GamePage() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Energy Retrieval step 1: pick 1 hand card to discard ── */}
+      {game.pendingTrainer?.type === 'energy-retrieval' && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 rounded-2xl p-5 max-w-lg w-full space-y-3">
+            <h3 className="font-bold text-yellow-400 text-center">Energy Retrieval</h3>
+            <p className="text-sm text-gray-400 text-center">Choose 1 card from your hand to discard.</p>
+            <div className="grid grid-cols-4 gap-2 max-h-72 overflow-y-auto">
+              {p1.hand.map(ci => (
+                <div key={ci.uid}
+                  className="flex flex-col items-center gap-1 cursor-pointer hover:opacity-80"
+                  onClick={() => resolveEnergyRetrievalAction(ci.uid)}>
+                  <CardImage card={ci.card} small />
+                  <span className="text-[9px] text-gray-300 text-center truncate w-full">{ci.card.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Energy Retrieval step 2: pick up to 2 energy from discard ── */}
+      {game.pendingTrainer?.type === 'energy-retrieval-energy' && (() => {
+        const { selectedEnergyUids } = game.pendingTrainer;
+        const energyCards = p1.discard.filter(c => c.card.supertype === 'Energy');
+        return (
+          <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-900 rounded-2xl p-5 max-w-lg w-full space-y-3">
+              <h3 className="font-bold text-yellow-400 text-center">Energy Retrieval</h3>
+              <p className="text-sm text-gray-400 text-center">
+                Choose up to 2 Energy cards from your discard to return to hand.{' '}
+                <span className="font-bold text-white">{selectedEnergyUids.length}/2 selected</span>
+              </p>
+              <div className="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto">
+                {energyCards.map(ci => {
+                  const selected = selectedEnergyUids.includes(ci.uid);
+                  return (
+                    <div key={ci.uid}
+                      className={`flex flex-col items-center gap-1 cursor-pointer rounded-xl p-1 transition-all ${selected ? 'ring-2 ring-yellow-400 bg-yellow-900/30' : 'hover:opacity-80'}`}
+                      onClick={() => resolveEnergyRetrievalAction(ci.uid)}>
+                      <CardImage card={ci.card} small />
+                      <span className="text-[9px] text-gray-300 text-center truncate w-full">{ci.card.name}</span>
+                    </div>
+                  );
+                })}
+                {energyCards.length === 0 && <p className="col-span-4 text-gray-500 text-sm text-center py-4">No energy in discard.</p>}
+              </div>
+              <button
+                onClick={() => resolveEnergyRetrievalAction(null)}
+                disabled={selectedEnergyUids.length === 0}
+                className="w-full py-2.5 bg-yellow-600 hover:bg-yellow-500 disabled:opacity-40 disabled:cursor-not-allowed text-black font-bold rounded-xl">
+                Retrieve ({selectedEnergyUids.length} card{selectedEnergyUids.length !== 1 ? 's' : ''})
+              </button>
             </div>
           </div>
         );

@@ -490,18 +490,7 @@ export function handleTrainerEffect(
     return after;
   }
 
-  // ── Energy Retrieval ──────────────────────────────────────────────────────
-  if (name === 'energy retrieval' || id === 'base1-81') {
-    const p = player();
-    if (p.hand.length === 0) return logMsg(after, `${playerName} can't use Energy Retrieval — no cards to discard.`);
-    const [discardThis, ...restHand] = p.hand;
-    const energies = p.discard.filter(c => c.card.supertype === 'Energy').slice(0, 2);
-    if (energies.length === 0) return logMsg(after, `${playerName} uses Energy Retrieval but has no energy in discard.`);
-    const newDiscard = p.discard.filter(c => !energies.find(e => e.uid === c.uid)).concat([discardThis]);
-    after = logMsg({ ...after, [playerId]: { ...p, hand: [...restHand, ...energies], discard: newDiscard } },
-      `${playerName} retrieves ${energies.length} energy card(s) from discard.`);
-    return after;
-  }
+  // Energy Retrieval — intercepted in playTrainer for player choice (discard 1, recover up to 2)
 
   // ── Super Energy Retrieval (Fossil set) ───────────────────────────────────
   if (name === 'super energy retrieval') {

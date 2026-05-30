@@ -1200,6 +1200,15 @@ export function playTrainer(state: GameState, handUid: string): GameState {
     return { ...next, pendingTrainer: { type: 'nightly-garbage-run', selectedUids: [] } };
   }
 
+  // ── Energy Retrieval: discard 1 from hand, recover up to 2 energy ──────────
+  if (name === 'energy retrieval' || id === 'base1-81') {
+    const p = next[active];
+    if (p.hand.length === 0) return log(next, `${p.name} can't use Energy Retrieval — no cards to discard.`);
+    const discardEnergy = p.discard.filter(c => c.card.supertype === 'Energy');
+    if (discardEnergy.length === 0) return log(next, `${p.name} uses Energy Retrieval but has no energy in discard.`);
+    return { ...next, pendingTrainer: { type: 'energy-retrieval' } };
+  }
+
   // Delegate to comprehensive handler for all other trainers
   return handleTrainerEffect(next, next, active, card, drawCard, inPlayPokemon);
 }
@@ -1442,6 +1451,56 @@ export function resolveBossWay(state: GameState, uid: string): GameState {
     { ...state, pendingTrainer: undefined, [active]: { ...player, hand: [...player.hand, deckCard], deck: newDeck } },
     `${player.name} uses The Boss's Way to find ${deckCard.card.name}!`,
   );
+}
+
+// ─── Energy Retrieval resolution ─────────────────────────────────────────────
+
+export function resolveEnergyRetrieval(state: GameState, uid: string | null): GameState {
+  const pending = state.pendingTrainer;
+  const active = state.activePlayer;
+  const player = state[active];
+
+  // Step 1: player picks 1 hand card to discard
+  if (pending?.type === 'energy-retrieval') {
+    if (uid === null) return state;
+    const card = player.hand.find(c => c.uid === uid);
+    if (!card) return state;
+    const newHand = player.hand.filter(c => c.uid !== uid);
+    const newDiscard = [...player.discard, card];
+    return log(
+      { ...state, pendingTrainer: { type: 'energy-retrieval-energy', discardUid: uid, selectedEnergyUids: [] }, [active]: { ...player, hand: newHand, discard: newDiscard } },
+      `${player.name} discards ${card.card.name} for Energy Retrieval.`,
+    );
+  }
+
+  // Step 2: player picks up to 2 energy from discard; null = confirm
+  if (pending?.type === 'energy-retrieval-energy') {
+    if (uid === null) {
+      // Confirm — retrieve selected energy cards
+      const { selectedEnergyUids } = pending;
+      const energies = selectedEnergyUids
+        .map(id => player.discard.find(c => c.uid === id))
+        .filter(Boolean) as import('./GameState').CardInstance[];
+      if (energies.length === 0) return { ...state, pendingTrainer: undefined };
+      const newDiscard = player.discard.filter(c => !selectedEnergyUids.includes(c.uid));
+      return log(
+        { ...state, pendingTrainer: undefined, [active]: { ...player, hand: [...player.hand, ...energies], discard: newDiscard } },
+        `${player.name} retrieves ${energies.map(e => e.card.name).join(' + ')} from discard!`,
+      );
+    }
+    // Toggle selection (max 2, must be an energy card)
+    const { selectedEnergyUids } = pending;
+    const energyCard = player.discard.find(c => c.uid === uid && c.card.supertype === 'Energy');
+    if (!energyCard) return state;
+    const already = selectedEnergyUids.includes(uid);
+    if (already) {
+      return { ...state, pendingTrainer: { ...pending, selectedEnergyUids: selectedEnergyUids.filter(u => u !== uid) } };
+    }
+    if (selectedEnergyUids.length >= 2) return state; // max 2
+    return { ...state, pendingTrainer: { ...pending, selectedEnergyUids: [...selectedEnergyUids, uid] } };
+  }
+
+  return { ...state, pendingTrainer: undefined };
 }
 
 // ─── Nightly Garbage Run resolution ─────────────────────────────────────────

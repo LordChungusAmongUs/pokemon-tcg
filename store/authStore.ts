@@ -515,6 +515,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const unlockedSets = SET_PROGRESSION
         .filter(s => s.prerequisite === null || isSetUnlocked(s.name, collection))
         .map(s => s.name)
+        .filter(name => name !== 'Wizards Black Star Promos')
         .filter(name => ALL_CARDS.some(c => c.set === name));
 
       if (unlockedSets.length > 0) {

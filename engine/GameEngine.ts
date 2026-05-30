@@ -968,16 +968,38 @@ export function endTurn(state: GameState): GameState {
   const active = state.activePlayer;
   const opponent = active === 'player1' ? 'player2' : 'player1';
   const player = state[active];
+  const oppPlayer = state[opponent];
 
   let updatedActive = player.active ? applyPoisonDamage(player.active) : null;
   updatedActive = updatedActive ? applyBurnDamage(updatedActive) : null;
 
+  const betweenTurnLogs: string[] = [];
+
+  // Sleep flip for the current player's active Pokémon (between turns)
   if (updatedActive?.statusCondition === 'Asleep') {
-    if (flip()) updatedActive = { ...updatedActive, statusCondition: null };
+    const pokeName = updatedActive.card.name;
+    if (flip()) {
+      updatedActive = { ...updatedActive, statusCondition: null };
+      betweenTurnLogs.push(`💤 ${pokeName} woke up!`);
+    } else {
+      betweenTurnLogs.push(`💤 ${pokeName} is still Asleep...`);
+    }
   }
   // Reset Energy Burn on active pokemon
   if (updatedActive?.energyBurned) updatedActive = { ...updatedActive, energyBurned: false };
   // Swords Dance flag persists to next player turn (cleared by attacking, not by end-of-turn)
+
+  // Sleep flip for the upcoming player's active Pokémon (between turns)
+  let updatedOppActive = oppPlayer.active;
+  if (updatedOppActive?.statusCondition === 'Asleep') {
+    const pokeName = updatedOppActive.card.name;
+    if (flip()) {
+      updatedOppActive = { ...updatedOppActive, statusCondition: null };
+      betweenTurnLogs.push(`💤 ${pokeName} woke up!`);
+    } else {
+      betweenTurnLogs.push(`💤 ${pokeName} is still Asleep...`);
+    }
+  }
 
   let next: GameState = {
     ...state,
@@ -989,10 +1011,14 @@ export function endTurn(state: GameState): GameState {
       hasAttackedThisTurn: false,
       attackDamageBonus: 0,
     },
+    [opponent]: {
+      ...oppPlayer,
+      active: updatedOppActive,
+    },
     activePlayer: opponent,
     turn: state.turn + 1,
     phase: 'draw',
-    log: [...state.log, `--- ${state[opponent].name}'s turn ---`],
+    log: [...state.log, ...betweenTurnLogs, `--- ${state[opponent].name}'s turn ---`],
     usedPowersThisTurn: [],
     // Note: cantAttackTarget intentionally NOT cleared here — it must survive into
     // the opponent's turn so the "can't attack" block can fire. It clears itself

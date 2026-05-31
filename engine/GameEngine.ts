@@ -970,10 +970,14 @@ export function endTurn(state: GameState): GameState {
   const player = state[active];
   const oppPlayer = state[opponent];
 
-  let updatedActive = player.active ? applyPoisonDamage(player.active) : null;
-  updatedActive = updatedActive ? applyBurnDamage(updatedActive) : null;
-
   const betweenTurnLogs: string[] = [];
+
+  // ── Between-turns effects for the current player's active ────────────────
+  let updatedActive = player.active ? applyPoisonDamage(player.active) : null;
+  if (player.active?.statusCondition === 'Poisoned' && updatedActive) {
+    betweenTurnLogs.push(`☠️ ${player.active.card.name} is Poisoned! Takes 10 damage.`);
+  }
+  updatedActive = updatedActive ? applyBurnDamage(updatedActive) : null;
 
   // Sleep flip for the current player's active Pokémon (between turns)
   if (updatedActive?.statusCondition === 'Asleep') {
@@ -989,8 +993,14 @@ export function endTurn(state: GameState): GameState {
   if (updatedActive?.energyBurned) updatedActive = { ...updatedActive, energyBurned: false };
   // Swords Dance flag persists to next player turn (cleared by attacking, not by end-of-turn)
 
+  // ── Between-turns effects for the upcoming player's active ───────────────
+  let updatedOppActive = oppPlayer.active ? applyPoisonDamage(oppPlayer.active) : null;
+  if (oppPlayer.active?.statusCondition === 'Poisoned' && updatedOppActive) {
+    betweenTurnLogs.push(`☠️ ${oppPlayer.active.card.name} is Poisoned! Takes 10 damage.`);
+  }
+  updatedOppActive = updatedOppActive ? applyBurnDamage(updatedOppActive) : null;
+
   // Sleep flip for the upcoming player's active Pokémon (between turns)
-  let updatedOppActive = oppPlayer.active;
   if (updatedOppActive?.statusCondition === 'Asleep') {
     const pokeName = updatedOppActive.card.name;
     if (flip()) {
@@ -1027,6 +1037,9 @@ export function endTurn(state: GameState): GameState {
 
   if (updatedActive && isKnockedOut(updatedActive)) {
     next = resolveKO(next, active, opponent);
+  }
+  if (updatedOppActive && isKnockedOut(updatedOppActive)) {
+    next = resolveKO(next, opponent, active);
   }
 
   return checkWinConditions(next);

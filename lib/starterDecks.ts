@@ -64,7 +64,7 @@ export const STARTER_DECKS: StarterDeck[] = [
   {
     id: 'custom-fists-and-fire',
     name: 'Fists & Fire',
-    description: 'Base Set only. Machamp punishes with big Fighting damage; Charmander/Charmeleon build toward the fire side.',
+    description: 'Base Set only. Machop and Machoke grind opponents down with Fighting power; Charmander and Charmeleon build toward the fire side.',
     type: 'Fighting/Fire',
     requiredSet: 'Base',
     prerequisiteSet: null,
@@ -94,34 +94,6 @@ export const STARTER_DECKS: StarterDeck[] = [
   },
 
   // ── BASE SET THEME DECKS ──────────────────────────────────────────────────
-  {
-    id: 'starter-machamp',
-    name: 'Machamp Deck',
-    description: 'The original 2-Player Starter Set fighting deck. Machamp hits hard; Psychic types provide backup.',
-    type: 'Fighting/Psychic',
-    requiredSet: 'Base',
-    prerequisiteSet: null,
-    cardIds: [
-      ...r('base1-52', 4), // Machop
-      ...r('base1-34', 3), // Machoke
-      ...r('base1-8',  2), // Machamp
-      ...r('base1-49', 4), // Drowzee
-      ...r('base1-31', 3), // Jynx
-      ...r('base1-5',  4), // Clefairy
-      ...r('base1-43', 2), // Abra
-      // Trainers
-      ...r(BILL,       2),
-      ...r(POTION,     3),
-      ...r(FULL_HEAL,  2),
-      ...r(SWITCH,     2),
-      ...r(GOW,        2),
-      ...r(ENERGY_REM, 2),
-      // Energy
-      ...r(E_FIGHTING, 14),
-      ...r(E_PSYCHIC,   7),
-      ...r(DCE,         4),
-    ],
-  },
   {
     id: 'starter-zap',
     name: 'Zap!',

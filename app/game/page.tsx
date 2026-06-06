@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/store/gameStore';
+import type { EventMetadata } from '@/store/gameStore';
 import InPlayCard from '@/components/board/InPlayCard';
 import EmptySlot from '@/components/board/EmptySlot';
 import CardImage from '@/components/cards/CardImage';
@@ -104,7 +105,7 @@ type PreviewState =
 
 export default function GamePage() {
   const {
-    game, selectedHandUid,
+    game, selectedHandUid, eventMetadata,
     drawPhase, playBasic, promoteFromBench,
     attachEnergyAction, retreatAction, attackAction,
     endTurnAction, playTrainerAction, resolveTrainerAction, evolveAction, selectHandCard,
@@ -115,6 +116,7 @@ export default function GamePage() {
     resolvePokemonBreederAction, resolveRecycleAction, confirmRetreatAction,
     resolveAttackDiscardAction, cancelAttackDiscardAction,
     resolveSendOutAction, resolveBossWayAction, resolveEnergyRetrievalAction,
+    shiftAction,
   } = useGameStore();
 
   const [detailCard, setDetailCard] = useState<CardData | null>(null);
@@ -123,16 +125,16 @@ export default function GamePage() {
   const [retreatEnergySelected, setRetreatEnergySelected] = useState<string[]>([]);
   const [attackDiscardSelected, setAttackDiscardSelected] = useState<string[]>([]);
   const [powerModal, setPowerModal] = useState<{
-    type: 'energy-trans' | 'damage-swap' | 'gengar-curse' | 'buzzap';
+    type: 'energy-trans' | 'damage-swap' | 'gengar-curse' | 'buzzap' | 'venomoth-shift';
     step: string;
     data: Record<string, string | number>;
   } | null>(null);
-  const { awardGameResult, addEncountered, addToCollection, pendingLevelUp, dismissLevelUp } = useAuthStore();
+  const { awardGameResult, addEncountered, addToCollection, addUnopenedPacks, addPackVouchers, pendingLevelUp, dismissLevelUp } = useAuthStore();
   const [promoWon, setPromoWon] = useState<CardData | null>(null);
   const [tierChange, setTierChange] = useState<{ tier: AIDifficulty; promoted: boolean; demoted: boolean } | null>(null);
   const [showOpponentDeck, setShowOpponentDeck] = useState(false);
   const [opponentDeckCards, setOpponentDeckCards] = useState<CardData[]>([]);
-  const [gameRewards, setGameRewards] = useState<{ credits: number; pack?: string; prizesTaken: number; tier: number } | null>(null);
+  const [gameRewards, setGameRewards] = useState<{ credits: number; pack?: string; prizesTaken: number; tier: number; eventPacks?: { setName: string; count: number }; eventVouchers?: number } | null>(null);
   const [passModal, setPassModal] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [discardViewSide, setDiscardViewSide] = useState<'player1' | 'player2' | null>(null);
@@ -240,12 +242,28 @@ export default function GamePage() {
       }
     }
 
+    // Award event prizes on win
+    // • Prerelease → 5 packs of that set
+    // • Draft / Sealed → 5 pack vouchers (redeem for any set in the shop)
+    let eventPacks: { setName: string; count: number } | undefined;
+    let eventVouchers: number | undefined;
+    if (won && eventMetadata) {
+      if (eventMetadata.type === 'prerelease') {
+        addUnopenedPacks(eventMetadata.setName, 5);
+        eventPacks = { setName: eventMetadata.setName, count: 5 };
+      } else {
+        // draft or sealed
+        addPackVouchers(5);
+        eventVouchers = 5;
+      }
+    }
+
     // Award credits + optional pack (async, capture results)
     awardGameResult(won, game.mode === 'local-2p' ? 'vs-ai' : 'vs-ai', {
       prizesTaken,
       aiTier: game.mode === 'vs-ai' ? aiTier : 1,
     }).then(({ creditsEarned, packAwarded }) => {
-      setGameRewards({ credits: creditsEarned, pack: packAwarded, prizesTaken, tier: aiTier });
+      setGameRewards({ credits: creditsEarned, pack: packAwarded, prizesTaken, tier: aiTier, eventPacks, eventVouchers });
     });
 
     // Award 1 random Wizards Black Star Promo on AI win — #1-18 and #20-28 only
@@ -443,13 +461,16 @@ export default function GamePage() {
     } else if (preview.source === 'own-active' && p1.active) {
       previewCard = p1.active.card;
       previewHp = { remaining: Math.max(0, (p1.active.card.hp ?? 0) - p1.active.damageTaken), max: p1.active.card.hp ?? 0 };
-      previewStatus = p1.active.statusCondition;
+      previewStatus = [
+        ...p1.active.statusConditions,
+        ...(p1.active.shiftedType ? [`Type: ${p1.active.shiftedType}`] : []),
+      ].join(', ') || null;
     } else if (preview.source === 'own-bench') {
       const b = p1.bench[preview.slot];
       if (b) {
         previewCard = b.card;
         previewHp = { remaining: Math.max(0, (b.card.hp ?? 0) - b.damageTaken), max: b.card.hp ?? 0 };
-        previewStatus = b.statusCondition;
+        previewStatus = b.statusConditions.join(', ') || null;
       }
     } else if (preview.source === 'opponent') {
       previewCard = preview.card;
@@ -593,6 +614,7 @@ export default function GamePage() {
                             else if (ab.name === 'Damage Swap') { setPowerModal({ type: 'damage-swap', step: 'pick-from', data: {} }); closePreview(); }
                             else if (ab.name === 'Curse') { setPowerModal({ type: 'gengar-curse', step: 'pick-from', data: {} }); closePreview(); }
                             else if (ab.name === 'Buzzap') { setPowerModal({ type: 'buzzap', step: 'pick-target', data: { benchSlot: String(p1.bench.findIndex(b => b?.card.abilities.some(a => a.name === 'Buzzap'))) } }); closePreview(); }
+                            else if (ab.name === 'Shift') { setPowerModal({ type: 'venomoth-shift', step: 'pick-type', data: {} }); closePreview(); }
                           };
                           return (
                             <button key={i} disabled={!canUse} onClick={handlePowerClick}
@@ -857,6 +879,22 @@ export default function GamePage() {
                     <div className="flex justify-between text-green-400">
                       <span>Booster pack</span>
                       <span className="font-medium">📦 {gameRewards.pack}</span>
+                    </div>
+                  )}
+                  {gameRewards.eventPacks && (
+                    <div className="border-t border-white/10 mt-1 pt-1">
+                      <div className="flex justify-between text-green-300 font-bold">
+                        <span>🎁 {gameRewards.eventPacks.count}× {gameRewards.eventPacks.setName} boosters</span>
+                        <span>Won!</span>
+                      </div>
+                    </div>
+                  )}
+                  {gameRewards.eventVouchers && (
+                    <div className="border-t border-white/10 mt-1 pt-1">
+                      <div className="flex justify-between text-yellow-300 font-bold">
+                        <span>🎟 {gameRewards.eventVouchers}× Pack Vouchers</span>
+                        <span>Redeem in Shop!</span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1895,6 +1933,28 @@ export default function GamePage() {
                   ))}
                 </div>
                 <button onClick={() => setPowerModal({ type: 'buzzap', step: 'pick-target', data: { benchSlot: powerModal.data.benchSlot } })} className="w-full py-2 bg-gray-700 text-white rounded-xl text-sm">Back</button>
+              </div>
+            </div>
+          );
+        }
+
+        if (powerModal.type === 'venomoth-shift' && powerModal.step === 'pick-type') {
+          const shiftTypes: EnergyType[] = ['Fire','Water','Grass','Lightning','Psychic','Fighting','Colorless','Darkness','Metal'];
+          return (
+            <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+              <div className="bg-gray-900 rounded-2xl p-5 max-w-xs w-full space-y-3">
+                <h3 className="font-bold text-purple-400 text-center">🦋 Shift — Choose Type</h3>
+                <p className="text-sm text-gray-400 text-center">Venomoth becomes this type until end of turn:</p>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {shiftTypes.map(t => (
+                    <button key={t}
+                      onClick={() => { shiftAction(t); setPowerModal(null); }}
+                      className="px-3 py-2 bg-purple-800 hover:bg-purple-700 rounded-xl text-sm font-bold text-white">
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setPowerModal(null)} className="w-full py-2 bg-gray-700 text-white rounded-xl text-sm">Cancel</button>
               </div>
             </div>
           );

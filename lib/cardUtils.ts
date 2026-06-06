@@ -183,14 +183,22 @@ export function typeEmoji(type: string): string {
   return map[type] || '?';
 }
 
-export function isSetUnlocked(setName: string, collection: Record<string, number>): boolean {
+export function isSetUnlocked(
+  setName: string,
+  collection: Record<string, number>,
+  completedPrereleases?: string[],
+): boolean {
   const entry = SET_PROGRESSION.find(s => s.name === setName);
   if (!entry) return true;
   if (entry.prerequisite === null) return true;
+  // Card-count threshold (75% of prerequisite set owned)
   const prereqCards = ALL_CARDS.filter(c => c.set === entry.prerequisite);
   if (prereqCards.length === 0) return true;
   const ownedCount = prereqCards.filter(c => (collection[c.id] ?? 0) > 0).length;
-  return ownedCount / prereqCards.length >= 0.75;
+  if (ownedCount / prereqCards.length < 0.75) return false;
+  // Prerelease requirement: must have played the prerequisite set's prerelease
+  if (completedPrereleases && !completedPrereleases.includes(entry.prerequisite)) return false;
+  return true;
 }
 
 export function setCompletionPct(setName: string, collection: Record<string, number>): number {

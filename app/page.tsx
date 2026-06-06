@@ -176,7 +176,7 @@ export default function HomePage() {
             <div className="bg-gray-900 border-2 border-yellow-500 rounded-2xl p-6 max-w-2xl w-full text-center space-y-4">
               <p className="text-xs text-yellow-400 uppercase tracking-widest font-bold">Welcome, Trainer!</p>
               <h2 className="text-2xl font-black text-white">Starter Deck</h2>
-              <p className="text-sm text-gray-300">You received the <span className="text-yellow-300 font-bold">Fists &amp; Fire</span> deck — Machamp and Fire-type Pokémon ready to battle!</p>
+              <p className="text-sm text-gray-300">You received the <span className="text-yellow-300 font-bold">Fists &amp; Fire</span> deck — Fighting and Fire-type Pokémon ready to battle! A bonus <span className="text-yellow-300 font-bold">Machamp</span> is also in your collection.</p>
               <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 max-h-[55vh] overflow-y-auto p-1">
                 {allCards.map((c, i) => <CardImage key={i} card={c} small />)}
               </div>
@@ -473,14 +473,13 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* AI Difficulty (vs-ai only) */}
+          {/* AI Difficulty — auto-adjusts by wins/losses (vs-ai only) */}
           {mode === 'vs-ai' && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs text-gray-400">AI Difficulty</label>
-                <span className="text-xs text-gray-500">3 wins = ↑ tier • 3 losses = ↓ tier</span>
+                <span className="text-xs text-gray-500">3 wins = ↑ tier · 3 losses = ↓ tier</span>
               </div>
-              {/* Tier display */}
               <div className="bg-black/30 rounded-xl px-4 py-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className={`font-bold text-base ${DIFFICULTY_COLORS[aiTier]}`}>
@@ -489,7 +488,6 @@ export default function HomePage() {
                   <span className="text-lg tracking-wider">{streakDisplay(streak)}</span>
                 </div>
                 <p className="text-xs text-gray-400">{DIFFICULTY_DESCRIPTIONS[aiTier]}</p>
-                {/* Streak progress */}
                 {streak.count > 0 && (
                   <p className="text-xs text-gray-500">
                     {streak.type === 'win'
@@ -497,23 +495,6 @@ export default function HomePage() {
                       : `${streak.count}/3 losses — next loss drops to Tier ${Math.max(1, aiTier - 1)}`}
                   </p>
                 )}
-              </div>
-              {/* Manual override arrows */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { const t = Math.max(1, aiTier - 1) as AIDifficulty; setAiTier(t); import('@/lib/aiDifficulty').then(m => m.setAITier(t)); }}
-                  disabled={aiTier <= 1}
-                  className="flex-1 py-1.5 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-lg text-xs font-medium transition-all"
-                >
-                  ◀ Easier
-                </button>
-                <button
-                  onClick={() => { const t = Math.min(5, aiTier + 1) as AIDifficulty; setAiTier(t); import('@/lib/aiDifficulty').then(m => m.setAITier(t)); }}
-                  disabled={aiTier >= 5}
-                  className="flex-1 py-1.5 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-lg text-xs font-medium transition-all"
-                >
-                  Harder ▶
-                </button>
               </div>
             </div>
           )}

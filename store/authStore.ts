@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import type { Profile, Deck } from '@/types/database';
 import { computeLevel, CREDIT_REWARDS, STARTING_CREDITS, VOUCHER_THRESHOLD, SET_PROGRESSION, getLevelUpReward, computeGameCredits, type LevelReward } from '@/lib/progression';
+import { resetAITier } from '@/lib/aiDifficulty';
 import { generatePackCards } from '@/lib/progression';
 import { setCompletionPct, ALL_CARDS, isSetUnlocked } from '@/lib/cardUtils';
 import { STARTER_DECKS } from '@/lib/starterDecks';
@@ -183,6 +184,7 @@ interface AuthStore {
   addCompletedPrerelease: (setName: string) => void;
   dismissLevelUp: () => void;
   usePackVoucher: () => void;
+  addPackVouchers: (count: number) => void;
   addUnopenedPacks: (setName: string, count: number) => void;
   consumeOnePack: (setName: string) => boolean;
   advanceOnboarding: (addPromoToCollection?: boolean) => void;
@@ -493,7 +495,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   awardGameResult: async (won, mode = 'vs-ai', opts = {}) => {
-    const { addXP, addCredits, addUnopenedPacks, collection, isLocalGuest } = get();
+    const { addXP, addCredits, addUnopenedPacks, collection, isLocalGuest, completedPrereleases } = get();
     const { prizesTaken = 0, aiTier = 1 } = opts;
 
     const xp = won ? 100 : 25;
@@ -513,7 +515,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     // Auto-grant a booster pack on any vs-ai win
     if (won && mode === 'vs-ai') {
       const unlockedSets = SET_PROGRESSION
-        .filter(s => s.prerequisite === null || isSetUnlocked(s.name, collection))
+        .filter(s => s.prerequisite === null || isSetUnlocked(s.name, collection, completedPrereleases))
         .map(s => s.name)
         .filter(name => name !== 'Wizards Black Star Promos')
         .filter(name => ALL_CARDS.some(c => c.set === name));
@@ -645,6 +647,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ packVouchers: next });
   },
 
+  addPackVouchers: (count: number) => {
+    const { user, isLocalGuest, packVouchers } = get();
+    if (!user || count <= 0) return;
+    const storageId = isLocalGuest ? LOCAL_GUEST_ID : user.id;
+    const next = packVouchers + count;
+    savePackVouchers(storageId, next);
+    set({ packVouchers: next });
+  },
+
   usePrereleaseInvite: (setName: string) => {
     const { user, isLocalGuest, prereleaseInvites } = get();
     if (!user) return;
@@ -686,7 +697,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       // Add non-energy cards + one of each unique basic energy type in the deck
       const nonEnergy = fistsFire.cardIds.filter(id => !id.startsWith('basic-energy-'));
       const energyTypes = [...new Set(fistsFire.cardIds.filter(id => id.startsWith('basic-energy-')))];
-      get().addToCollection([...nonEnergy, ...energyTypes]);
+      // Also award 1 Base Set Machamp as a bonus starter card
+      get().addToCollection([...nonEnergy, ...energyTypes, 'base1-8']);
       try {
         const key = 'pokemon-tcg-decks';
         const all: { name: string; cardIds: string[] }[] = JSON.parse(localStorage.getItem(key) || '[]');
@@ -712,6 +724,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ onboardingStep: 1, onboardingPromoCardId: promoCard?.id ?? null });
 
     markStarterGiven(storageId);
+
+    // Always reset AI tier so new profiles start at Lv 1
+    resetAITier();
   },
 
   resetAccount: async () => {
@@ -731,6 +746,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     // Clear all saved decklists and last-deck preference
     try { localStorage.removeItem('pokemon-tcg-decks'); } catch {}
     try { localStorage.removeItem('pokemon-tcg-last-deck'); } catch {}
+
+    // Reset AI tier so the fresh account starts at Lv 1
+    resetAITier();
 
     if (isLocalGuest) {
       const reset: Profile = { ...makeGuestProfile(), display_name: profile?.display_name ?? 'Trainer' };

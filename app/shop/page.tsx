@@ -31,7 +31,7 @@ export default function ShopPage() {
 
   async function redeemPackVoucher(setName: string) {
     if (!user) { alert('Sign in first!'); return; }
-    if (!isSetUnlocked(setName, collection)) { alert('This set is not unlocked yet.'); return; }
+    if (!isSetUnlocked(setName, collection, completedPrereleases)) { alert('This set is not unlocked yet.'); return; }
     usePackVoucher();
     addUnopenedPacks(setName, 1);
     alert(`1 ${setName} pack added to your inventory!`);
@@ -41,10 +41,15 @@ export default function ShopPage() {
     if (!user) { alert('Sign in to buy packs!'); return; }
     const cost = count === 1 ? PACK_COST : count === 5 ? PACK_BUNDLE_5 : PACK_BUNDLE_10;
     if (credits < cost) { alert('Not enough credits!'); return; }
-    if (!isSetUnlocked(setName, collection)) {
+    if (!isSetUnlocked(setName, collection, completedPrereleases)) {
       const entry = SET_PROGRESSION.find(s => s.name === setName);
       const pct = Math.round(setCompletionPct(entry?.prerequisite ?? '', collection) * 100);
-      alert(`Complete 75% of ${entry?.prerequisite} to unlock this set (you have ${pct}%).`);
+      const prereqDone = !entry?.prerequisite || completedPrereleases.includes(entry.prerequisite);
+      if (!prereqDone) {
+        alert(`You must complete the ${entry?.prerequisite} Prerelease event before unlocking ${setName}.`);
+      } else {
+        alert(`Complete 75% of ${entry?.prerequisite} to unlock this set (you have ${pct}%).`);
+      }
       return;
     }
     await addCredits(-cost);
@@ -104,7 +109,9 @@ export default function ShopPage() {
     // Non-energy cards + one of each unique basic energy type (unlocks that type)
     const nonEnergy = sd.cardIds.filter(id => !id.startsWith('basic-energy-'));
     const energyTypes = [...new Set(sd.cardIds.filter(id => id.startsWith('basic-energy-')))];
-    return [...nonEnergy, ...energyTypes];
+    // Fists & Fire always includes a bonus Base Set Machamp
+    const bonus = sd.id === 'custom-fists-and-fire' ? ['base1-8'] : [];
+    return [...nonEnergy, ...energyTypes, ...bonus];
   }
 
   async function handleBuyDeck(sd: typeof STARTER_DECKS[0]) {
@@ -338,17 +345,21 @@ export default function ShopPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {SHOP_SETS.map(({ name, prerequisite }) => {
-                // Base Set requires completing the prerelease event first;
-                // fall back to allowing access if player already owns Base Set cards (backward compat).
-                const baseSetGate = name === 'Base'
-                  ? (completedPrereleases.includes('Base') || Object.keys(collection).some(id => {
-                      const c = ALL_CARDS.find(card => card.id === id);
-                      return c?.set === 'Base' && (collection[id] ?? 0) > 0;
-                    }))
-                  : true;
-                const unlocked = baseSetGate && isSetUnlocked(name, collection);
-                const baseNotDone = name === 'Base' && !baseSetGate;
-                const pct = prerequisite ? Math.round(setCompletionPct(prerequisite, collection) * 100) : 100;
+                // A set is purchasable when:
+                // • Base Set: player has completed the Base Set prerelease
+                //   (backward-compat: also allow if they already own Base cards)
+                // • Every other set: player owns ≥75% of the prerequisite set's cards
+                //   AND has completed the prerequisite set's prerelease
+                const backCompat = name === 'Base' && Object.keys(collection).some(id => {
+                  const c = ALL_CARDS.find(card => card.id === id);
+                  return c?.set === 'Base' && (collection[id] ?? 0) > 0;
+                });
+                // Which prerelease is required for this set?
+                // Base needs its own prerelease; every other set needs the prerequisite's prerelease.
+                const requiredPrerelease = prerequisite ?? name;
+                const prereleaseDone = completedPrereleases.includes(requiredPrerelease) || backCompat;
+                const unlocked = prereleaseDone && isSetUnlocked(name, collection, completedPrereleases);
+                const prereqCardsPct = prerequisite ? Math.round(setCompletionPct(prerequisite, collection) * 100) : 100;
                 const voucherPct = Math.round(VOUCHER_THRESHOLD * 100);
                 const unlockPct = Math.round(UNLOCK_THRESHOLD * 100);
                 const hasVoucher = freeVouchers.includes(name);
@@ -362,17 +373,17 @@ export default function ShopPage() {
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex-1">
                         <div className="font-bold text-sm">{name}</div>
-                        {baseNotDone && (
-                        <div className="text-xs text-blue-400 mt-0.5">
-                          🎮 Complete the Base Set Prerelease first!
-                        </div>
-                      )}
-                      {!unlocked && !baseNotDone && prerequisite && (
+                        {!prereleaseDone && (
+                          <div className="text-xs text-blue-400 mt-0.5">
+                            🎮 Complete the {requiredPrerelease} Prerelease first!
+                          </div>
+                        )}
+                        {prereleaseDone && !unlocked && prerequisite && (
                           <>
                             <div className="text-xs text-yellow-500 mt-0.5">
-                              🔒 {prerequisite}: {pct}% / {unlockPct}% to unlock
+                              🔒 {prerequisite}: {prereqCardsPct}% / {unlockPct}% to unlock
                             </div>
-                            {pct < voucherPct && (
+                            {prereqCardsPct < voucherPct && (
                               <div className="text-[10px] text-gray-500 mt-0.5">
                                 At {voucherPct}%: free deck voucher + prerelease invite
                               </div>
@@ -519,11 +530,6 @@ export default function ShopPage() {
 
           // Explicit deck groups — order and membership controlled here
           const GROUPS: { label: string; ids: string[]; prereqSet: string | null; prereqPct: number; requiresPrerelease?: string }[] = [
-            {
-              label: 'Starter Set',
-              ids: ['starter-machamp'],
-              prereqSet: null, prereqPct: 0,
-            },
             {
               label: 'Base Set',
               ids: ['starter-overgrowth', 'starter-zap', 'starter-brushfire', 'starter-blackout'],

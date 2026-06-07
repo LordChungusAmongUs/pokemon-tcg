@@ -743,8 +743,14 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
   let newDefenderActive = { ...defender.active, damageTaken: defender.active.damageTaken + damage };
 
   // ── Status condition(s) on defender ──────────────────────────────────────
-  // Helper: add a status to a Pokémon only if not already present (one of each kind)
+  // Helper: add a status to a Pokémon.
+  // 'Poisoned' and 'Toxic' are mutually exclusive — applying either removes the other.
   function addStatus(poke: typeof newDefenderActive, sc: import('./GameState').StatusCondition) {
+    if (sc === 'Toxic' || sc === 'Poisoned') {
+      // Replace whichever poison variant is already there (or add fresh)
+      const scs = poke.statusConditions.filter(s => s !== 'Poisoned' && s !== 'Toxic');
+      return { ...poke, statusConditions: [...scs, sc] };
+    }
     if (poke.statusConditions.includes(sc)) return poke;
     return { ...poke, statusConditions: [...poke.statusConditions, sc] };
   }
@@ -1036,7 +1042,9 @@ export function endTurn(state: GameState): GameState {
 
   // ── Between-turns effects for the current player's active ────────────────
   let updatedActive = player.active ? applyPoisonDamage(player.active) : null;
-  if (player.active?.statusConditions.includes('Poisoned') && updatedActive) {
+  if (player.active?.statusConditions.includes('Toxic') && updatedActive) {
+    betweenTurnLogs.push(`☠️ ${player.active.card.name} is badly Poisoned (Toxic)! Takes 20 damage.`);
+  } else if (player.active?.statusConditions.includes('Poisoned') && updatedActive) {
     betweenTurnLogs.push(`☠️ ${player.active.card.name} is Poisoned! Takes 10 damage.`);
   }
   updatedActive = updatedActive ? applyBurnDamage(updatedActive) : null;
@@ -1059,7 +1067,9 @@ export function endTurn(state: GameState): GameState {
 
   // ── Between-turns effects for the upcoming player's active ───────────────
   let updatedOppActive = oppPlayer.active ? applyPoisonDamage(oppPlayer.active) : null;
-  if (oppPlayer.active?.statusConditions.includes('Poisoned') && updatedOppActive) {
+  if (oppPlayer.active?.statusConditions.includes('Toxic') && updatedOppActive) {
+    betweenTurnLogs.push(`☠️ ${oppPlayer.active.card.name} is badly Poisoned (Toxic)! Takes 20 damage.`);
+  } else if (oppPlayer.active?.statusConditions.includes('Poisoned') && updatedOppActive) {
     betweenTurnLogs.push(`☠️ ${oppPlayer.active.card.name} is Poisoned! Takes 10 damage.`);
   }
   updatedOppActive = updatedOppActive ? applyBurnDamage(updatedOppActive) : null;

@@ -111,6 +111,12 @@ export function computeAttackEffects(
 
   const cardId = attackerPokemon.card.id;
 
+  // ── Nidoking Toxic — bad poison (20 damage between turns instead of 10) ──────
+  if (atk.name === 'Toxic' && (cardId === 'base1-11' || attackerPokemon.card.name === 'Nidoking')) {
+    res.defenderStatus = 'Toxic';
+    return res;
+  }
+
   // ── Venom Powder (Venomoth base1-29) — coin flip; heads = Poisoned + Confused ─
   if ((cardId === 'base1-29' || attackerPokemon.card.name === 'Venomoth') && atk.name === 'Venom Powder') {
     const heads = flip();

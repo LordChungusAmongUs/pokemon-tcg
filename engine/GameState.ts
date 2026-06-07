@@ -2,7 +2,8 @@ export type EnergyType =
   | 'Fire' | 'Water' | 'Grass' | 'Lightning' | 'Psychic'
   | 'Fighting' | 'Darkness' | 'Metal' | 'Colorless' | 'Dragon' | 'Fairy';
 
-export type StatusCondition = 'Poisoned' | 'Asleep' | 'Paralyzed' | 'Burned' | 'Confused';
+export type StatusCondition = 'Poisoned' | 'Toxic' | 'Asleep' | 'Paralyzed' | 'Burned' | 'Confused';
+// 'Toxic' = bad poison from Nidoking — 20 damage between turns instead of 10; mutually exclusive with 'Poisoned'
 
 export interface CardAttack {
   name: string;

@@ -33,6 +33,10 @@ export function calculateDamage(
 }
 
 export function applyPoisonDamage(pokemon: InPlayPokemon): InPlayPokemon {
+  // Toxic (Nidoking bad poison) deals 20 between turns; regular Poison deals 10
+  if (pokemon.statusConditions.includes('Toxic')) {
+    return { ...pokemon, damageTaken: pokemon.damageTaken + 20 };
+  }
   if (!pokemon.statusConditions.includes('Poisoned')) return pokemon;
   return { ...pokemon, damageTaken: pokemon.damageTaken + 10 };
 }

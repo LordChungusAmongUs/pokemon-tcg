@@ -117,6 +117,22 @@ export function computeAttackEffects(
     return res;
   }
 
+  // ── Big Eggsplosion (Jungle Exeggutor base2-35) ─────────────────────────────
+  // Flip a coin for each Energy card attached to Exeggutor; 20 damage per heads.
+  // The coin count is dynamic (= attached energy count), so the generic multi-coin
+  // regex ("Flip N coins") doesn't fire — needs its own handler.
+  if (atk.name === 'Big Eggsplosion' && (cardId === 'base2-35' || attackerPokemon.card.name === 'Exeggutor')) {
+    const numFlips = attackerPokemon.attachedEnergy.length; // energy cards, not symbols
+    let heads = 0;
+    for (let i = 0; i < numFlips; i++) if (flip()) heads++;
+    res.rawDamage = 20 * heads;
+    res.coinMsg = numFlips === 0
+      ? '(no energy attached — 0 damage)'
+      : `(${heads}/${numFlips} heads)`;
+    res.defenderStatus = null;
+    return res;
+  }
+
   // ── Venom Powder (Venomoth base1-29) — coin flip; heads = Poisoned + Confused ─
   if ((cardId === 'base1-29' || attackerPokemon.card.name === 'Venomoth') && atk.name === 'Venom Powder') {
     const heads = flip();

@@ -109,12 +109,17 @@ export default function InPlayCard({ pokemon, onClick, selected, isActive, small
         <div className={`${barColor} h-1.5 rounded-full transition-all`} style={{ width: `${pct}%` }} />
       </div>
 
-      {/* HP text + status */}
-      <div className="flex items-center gap-0.5 text-[10px] text-white leading-none">
+      {/* HP text + status badges (all active conditions) */}
+      <div className="flex items-center gap-0.5 text-[10px] text-white leading-none flex-wrap justify-center">
         <span>{remaining}/{hp}</span>
-        {pokemon.statusCondition && (
-          <span className={`${STATUS_COLORS[pokemon.statusCondition]} px-1 rounded text-white text-[9px]`}>
-            {pokemon.statusCondition.slice(0, 3)}
+        {pokemon.statusConditions.map(sc => (
+          <span key={sc} className={`${STATUS_COLORS[sc]} px-1 rounded text-white text-[9px]`}>
+            {sc.slice(0, 3)}
+          </span>
+        ))}
+        {pokemon.shiftedType && (
+          <span className={`${TYPE_BG[pokemon.shiftedType] ?? 'bg-gray-600'} px-1 rounded text-white text-[9px]`}>
+            {pokemon.shiftedType.slice(0, 3)}
           </span>
         )}
       </div>

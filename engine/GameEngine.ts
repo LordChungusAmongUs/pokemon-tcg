@@ -43,7 +43,7 @@ export function inPlayPokemon(card: CardData, turn: number): InPlayPokemon {
     currentHP: card.hp ?? 10,
     damageTaken: 0,
     attachedEnergy: [],
-    statusCondition: null,
+    statusConditions: [],
     turnPlayed: turn,
     isFirstTurn: false,
     evolvedFrom: [],
@@ -86,8 +86,8 @@ function hasAbility(pokemon: InPlayPokemon, name: string): boolean {
 
 function isMukSuppressing(state: GameState): boolean {
   const anyMuk = (p: typeof state.player1) =>
-    (p.active !== null && hasAbility(p.active, 'Toxic Gas') && p.active.statusCondition === null) ||
-    p.bench.some(b => b !== null && hasAbility(b, 'Toxic Gas') && b.statusCondition === null);
+    (p.active !== null && hasAbility(p.active, 'Toxic Gas') && p.active.statusConditions.length === 0) ||
+    p.bench.some(b => b !== null && hasAbility(b, 'Toxic Gas') && b.statusConditions.length === 0);
   return anyMuk(state.player1) || anyMuk(state.player2);
 }
 
@@ -101,8 +101,8 @@ function isPassivePowerOn(pokemon: InPlayPokemon, name: string, state: GameState
 // Active "during your turn" power — blocked by Asleep/Confused/Paralyzed
 export function isActivePowerOn(pokemon: InPlayPokemon, name: string, state: GameState): boolean {
   if (!isPassivePowerOn(pokemon, name, state)) return false;
-  const sc = pokemon.statusCondition;
-  return sc !== 'Asleep' && sc !== 'Confused' && sc !== 'Paralyzed';
+  const scs = pokemon.statusConditions;
+  return !scs.includes('Asleep') && !scs.includes('Confused') && !scs.includes('Paralyzed');
 }
 
 function powerUsed(state: GameState, uid: string, name: string): boolean {
@@ -147,8 +147,9 @@ function hasBasicInHand(player: PlayerState): boolean {
 }
 
 function finishSetup(state: GameState): GameState {
-  const p1 = { ...state.player1, prizes: state.player1.deck.slice(0, 6), deck: state.player1.deck.slice(6) };
-  const p2 = { ...state.player2, prizes: state.player2.deck.slice(0, 6), deck: state.player2.deck.slice(6) };
+  const n = state.prizeCount;
+  const p1 = { ...state.player1, prizes: state.player1.deck.slice(0, n), deck: state.player1.deck.slice(n) };
+  const p2 = { ...state.player2, prizes: state.player2.deck.slice(0, n), deck: state.player2.deck.slice(n) };
 
   const p1First = Math.random() < 0.5;
   const firstPlayer: 'player1' | 'player2' = p1First ? 'player1' : 'player2';
@@ -188,6 +189,7 @@ export function initGame(
   p1Name: string, p1Deck: CardData[],
   p2Name: string, p2Deck: CardData[],
   mode: 'vs-ai' | 'local-2p',
+  prizeCount = 6,
 ): GameState {
   let p1 = makePlayer('player1', p1Name, p1Deck);
   let p2 = makePlayer('player2', p2Name, p2Deck);
@@ -223,6 +225,7 @@ export function initGame(
     pendingCoinFlip: false,
     mode,
     usedPowersThisTurn: [],
+    prizeCount,
   };
 }
 
@@ -396,7 +399,7 @@ export function retreat(state: GameState, benchSlot: number): GameState {
   if (!player.active) return state;
 
   // ── Confusion check for retreat ─────────────────────────────────────────
-  if (player.active.statusCondition === 'Confused') {
+  if (player.active.statusConditions.includes('Confused')) {
     const heads = flip();
     if (!heads) {
       return log(state, `😵 ${player.active.card.name} is Confused — coin flip tails! Can't retreat.`);
@@ -444,8 +447,8 @@ function applyRetreat(state: GameState, benchSlot: number, energyUids: string[])
     ? player.active.attachedEnergy.filter(e => energyUids.includes(e.uid))
     : [];
   const remainingEnergy = player.active.attachedEnergy.filter(e => !energyUids.includes(e.uid));
-  // Status conditions are cured when a Pokémon retreats to the bench
-  const retreatedPokemon = { ...player.active, attachedEnergy: remainingEnergy, statusCondition: null };
+  // Status conditions and Shift type are cleared when a Pokémon retreats to the bench
+  const retreatedPokemon = { ...player.active, attachedEnergy: remainingEnergy, statusConditions: [], shiftedType: undefined };
 
   const newBench = [...player.bench];
   newBench[benchSlot] = retreatedPokemon;
@@ -571,13 +574,13 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
   if (!skipCostCheck && !canPayCost(atk.cost, effectiveEnergy)) return state;
 
   // ── Asleep check ─────────────────────────────────────────────────────────
-  if (attacker.active.statusCondition === 'Asleep') {
+  if (attacker.active.statusConditions.includes('Asleep')) {
     return log(state, `${attacker.active.card.name} is Asleep and can't attack!`);
   }
 
   // ── Paralysis check ──────────────────────────────────────────────────────
-  if (attacker.active.statusCondition === 'Paralyzed') {
-    const cleared = { ...attacker.active, statusCondition: null };
+  if (attacker.active.statusConditions.includes('Paralyzed')) {
+    const cleared = { ...attacker.active, statusConditions: attacker.active.statusConditions.filter(s => s !== 'Paralyzed') };
     return log(
       { ...state, [active]: { ...attacker, active: cleared, hasAttackedThisTurn: true } },
       `${attacker.active.card.name} is Paralyzed and can't attack! The Paralysis fades.`,
@@ -585,7 +588,7 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
   }
 
   // ── Confusion check ──────────────────────────────────────────────────────
-  if (attacker.active.statusCondition === 'Confused') {
+  if (attacker.active.statusConditions.includes('Confused')) {
     const heads = flip();
     if (!heads) {
       const selfDamaged = { ...attacker.active, damageTaken: attacker.active.damageTaken + 30 };
@@ -654,7 +657,11 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
   // Swords Dance boost: Slash does 60 instead of 30 the turn after Swords Dance
   const swordsDanceBoosted = atk.name === 'Slash' && attacker.active.swordsDanceActive;
   const rawDamage = swordsDanceBoosted ? 60 : fx.rawDamage;
-  let damage = calculateDamage(attacker.active.card.types, atk, defender.active, rawDamage);
+  // Shift power overrides the attacker's type for weakness/resistance matching
+  const attackerTypes = attacker.active.shiftedType
+    ? [attacker.active.shiftedType]
+    : attacker.active.card.types;
+  let damage = calculateDamage(attackerTypes, atk, defender.active, rawDamage);
   // PlusPower bonus (added after W/R)
   damage += attacker.attackDamageBonus;
   // Flat bonus from card effects (also after W/R conceptually — bench count, energy count)
@@ -702,6 +709,30 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
     }
   }
 
+  // ── Defender shield ───────────────────────────────────────────────────────
+  // Reduces incoming damage by 20 AFTER W/R. Consumed on the first attack against
+  // the protected Pokémon, or cleared if that Pokémon is no longer the active.
+  let defenderShield = state.defenderShield;
+  if (defenderShield) {
+    if (defenderShield.protectedUid === defender.active.uid) {
+      const reduction = Math.min(20, damage);
+      damage = Math.max(0, damage - 20);
+      if (reduction > 0) {
+        preventionMsgs.push(`🛡 Defender reduces damage by ${reduction}!`);
+      }
+      defenderShield = undefined; // consumed
+    } else {
+      // Protected Pokémon is no longer the active defender — clear if switched out
+      const allUids = [
+        state[active].active?.uid, ...state[active].bench.map(b => b?.uid),
+        state[opponent].active?.uid, ...state[opponent].bench.map(b => b?.uid),
+      ];
+      if (!allUids.includes(defenderShield.protectedUid)) {
+        defenderShield = undefined;
+      }
+    }
+  }
+
   // ── Build log message ────────────────────────────────────────────────────
   let msg = `${attacker.active.card.name} uses ${atk.name}`;
   if (damage > 0) msg += ` for ${damage} damage`;
@@ -711,21 +742,32 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
   // ── Apply damage to defender ─────────────────────────────────────────────
   let newDefenderActive = { ...defender.active, damageTaken: defender.active.damageTaken + damage };
 
-  // ── Status condition on defender ─────────────────────────────────────────
+  // ── Status condition(s) on defender ──────────────────────────────────────
+  // Helper: add a status to a Pokémon only if not already present (one of each kind)
+  function addStatus(poke: typeof newDefenderActive, sc: import('./GameState').StatusCondition) {
+    if (poke.statusConditions.includes(sc)) return poke;
+    return { ...poke, statusConditions: [...poke.statusConditions, sc] };
+  }
   if (!blockDefStatus) {
-    if (fx.defenderStatus !== false) {
+    if (fx.defenderStatuses.length > 0) {
+      // Multi-status (e.g. Venom Powder: Poisoned + Confused)
+      for (const sc of fx.defenderStatuses) {
+        newDefenderActive = addStatus(newDefenderActive, sc);
+      }
+    } else if (fx.defenderStatus !== false) {
       if (fx.defenderStatus !== null) {
-        newDefenderActive = { ...newDefenderActive, statusCondition: fx.defenderStatus };
+        newDefenderActive = addStatus(newDefenderActive, fx.defenderStatus);
       }
     } else {
+      // Text-based detection for simple always-apply statuses
       const text = atk.text?.toLowerCase() ?? '';
       if (!text.includes('flip a coin')) {
-        if (text.includes('asleep')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Asleep' };
-        else if (text.includes('paralyz')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Paralyzed' };
-        else if (text.includes('poison')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Poisoned' };
+        if (text.includes('asleep')) newDefenderActive = addStatus(newDefenderActive, 'Asleep');
+        else if (text.includes('paralyz')) newDefenderActive = addStatus(newDefenderActive, 'Paralyzed');
+        else if (text.includes('poison')) newDefenderActive = addStatus(newDefenderActive, 'Poisoned');
         else if (text.includes('confus') && !text.includes(attacker.active.card.name.toLowerCase())) {
-          newDefenderActive = { ...newDefenderActive, statusCondition: 'Confused' };
-        } else if (text.includes('burn')) newDefenderActive = { ...newDefenderActive, statusCondition: 'Burned' };
+          newDefenderActive = addStatus(newDefenderActive, 'Confused');
+        } else if (text.includes('burn')) newDefenderActive = addStatus(newDefenderActive, 'Burned');
       }
     }
   }
@@ -753,8 +795,9 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
   // ── Self-confusion (Vileplume Petal Dance) ───────────────────────────────
   if (fx.selfStatus) {
     const p = next[active];
-    if (p.active) {
-      next = log({ ...next, [active]: { ...p, active: { ...p.active, statusCondition: fx.selfStatus } } },
+    if (p.active && !p.active.statusConditions.includes(fx.selfStatus)) {
+      const newScs = [...p.active.statusConditions, fx.selfStatus];
+      next = log({ ...next, [active]: { ...p, active: { ...p.active, statusConditions: newScs } } },
         `${p.active.card.name} is now ${fx.selfStatus}!`);
     }
   }
@@ -928,6 +971,9 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
     next = { ...next, snivel };
   }
 
+  // Propagate Defender shield (may have been consumed or cleared above)
+  next = { ...next, defenderShield };
+
   // ── Resolve KOs ──────────────────────────────────────────────────────────
   // Check opponent active KO
   next = resolveKO(next, opponent, active);
@@ -962,6 +1008,22 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
   return checkWinConditions(next);
 }
 
+// ─── Venomoth Shift power ────────────────────────────────────────────────────
+// Once per turn: choose a type; Venomoth's effective type becomes that type until end of turn.
+
+export function useShift(state: GameState, shiftType: EnergyType): GameState {
+  const active = state.activePlayer;
+  const player = state[active];
+  if (!player.active) return state;
+  if (!isActivePowerOn(player.active, 'Shift', state)) return state;
+  if (powerUsed(state, player.active.uid, 'Shift')) return state;
+
+  const updated = { ...player.active, shiftedType: shiftType };
+  let next: GameState = { ...state, [active]: { ...player, active: updated } };
+  next = markPowerUsed(next, player.active.uid, 'Shift');
+  return log(next, `🦋 ${player.active.card.name}'s Shift! Type is now ${shiftType} for this turn.`);
+}
+
 // ─── end of turn ─────────────────────────────────────────────────────────────
 
 export function endTurn(state: GameState): GameState {
@@ -974,16 +1036,16 @@ export function endTurn(state: GameState): GameState {
 
   // ── Between-turns effects for the current player's active ────────────────
   let updatedActive = player.active ? applyPoisonDamage(player.active) : null;
-  if (player.active?.statusCondition === 'Poisoned' && updatedActive) {
+  if (player.active?.statusConditions.includes('Poisoned') && updatedActive) {
     betweenTurnLogs.push(`☠️ ${player.active.card.name} is Poisoned! Takes 10 damage.`);
   }
   updatedActive = updatedActive ? applyBurnDamage(updatedActive) : null;
 
   // Sleep flip for the current player's active Pokémon (between turns)
-  if (updatedActive?.statusCondition === 'Asleep') {
+  if (updatedActive?.statusConditions.includes('Asleep')) {
     const pokeName = updatedActive.card.name;
     if (flip()) {
-      updatedActive = { ...updatedActive, statusCondition: null };
+      updatedActive = { ...updatedActive, statusConditions: updatedActive.statusConditions.filter(s => s !== 'Asleep') };
       betweenTurnLogs.push(`💤 ${pokeName} woke up!`);
     } else {
       betweenTurnLogs.push(`💤 ${pokeName} is still Asleep...`);
@@ -991,20 +1053,22 @@ export function endTurn(state: GameState): GameState {
   }
   // Reset Energy Burn on active pokemon
   if (updatedActive?.energyBurned) updatedActive = { ...updatedActive, energyBurned: false };
+  // Reset Shift type at end of active player's turn
+  if (updatedActive?.shiftedType) updatedActive = { ...updatedActive, shiftedType: undefined };
   // Swords Dance flag persists to next player turn (cleared by attacking, not by end-of-turn)
 
   // ── Between-turns effects for the upcoming player's active ───────────────
   let updatedOppActive = oppPlayer.active ? applyPoisonDamage(oppPlayer.active) : null;
-  if (oppPlayer.active?.statusCondition === 'Poisoned' && updatedOppActive) {
+  if (oppPlayer.active?.statusConditions.includes('Poisoned') && updatedOppActive) {
     betweenTurnLogs.push(`☠️ ${oppPlayer.active.card.name} is Poisoned! Takes 10 damage.`);
   }
   updatedOppActive = updatedOppActive ? applyBurnDamage(updatedOppActive) : null;
 
   // Sleep flip for the upcoming player's active Pokémon (between turns)
-  if (updatedOppActive?.statusCondition === 'Asleep') {
+  if (updatedOppActive?.statusConditions.includes('Asleep')) {
     const pokeName = updatedOppActive.card.name;
     if (flip()) {
-      updatedOppActive = { ...updatedOppActive, statusCondition: null };
+      updatedOppActive = { ...updatedOppActive, statusConditions: updatedOppActive.statusConditions.filter(s => s !== 'Asleep') };
       betweenTurnLogs.push(`💤 ${pokeName} woke up!`);
     } else {
       betweenTurnLogs.push(`💤 ${pokeName} is still Asleep...`);
@@ -1040,6 +1104,14 @@ export function endTurn(state: GameState): GameState {
   }
   if (updatedOppActive && isKnockedOut(updatedOppActive)) {
     next = resolveKO(next, opponent, active);
+  }
+
+  // ── Defender shield expiry ────────────────────────────────────────────────
+  // Shield was played on state.turn; the opponent had state.turn+1 to benefit from it.
+  // If we reach endTurn and playedOnTurn < state.turn (i.e. at least one full turn has
+  // elapsed since it was played without an attack consuming it), clear it now.
+  if (next.defenderShield && next.defenderShield.playedOnTurn < state.turn) {
+    next = { ...next, defenderShield: undefined };
   }
 
   return checkWinConditions(next);
@@ -1677,7 +1749,8 @@ export function evolve(state: GameState, handUid: string, targetUid: string): Ga
       card: evoCard.card,
       currentHP: evoCard.card.hp ?? pokemon.currentHP,
       damageTaken: Math.max(0, damageTaken),
-      statusCondition: null,
+      statusConditions: [],
+      shiftedType: undefined,
       turnPlayed: state.turn,
       evolvedFrom: [...pokemon.evolvedFrom, pokemon.card],
       energyBurned: false,

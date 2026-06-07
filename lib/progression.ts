@@ -125,7 +125,13 @@ export const PACK_COST = 30;
 export const PACK_BUNDLE_5 = 125;
 export const PACK_BUNDLE_10 = 250;
 export const THEME_DECK_COST = 150;
-export const STARTING_CREDITS = 50000;
+export const STARTING_CREDITS = 500;
+
+// Promo IDs awarded for participating in Draft / Sealed events (#1-20 and #22-28)
+export const EVENT_PROMO_IDS: string[] = [
+  ...Array.from({ length: 20 }, (_, i) => `basep-${i + 1}`),  // basep-1 … basep-20
+  ...Array.from({ length: 7 },  (_, i) => `basep-${i + 22}`), // basep-22 … basep-28
+];
 
 export const SINGLE_COSTS: Record<string, number> = {
   Common: 3,

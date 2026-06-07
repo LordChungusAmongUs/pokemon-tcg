@@ -33,15 +33,15 @@ export function calculateDamage(
 }
 
 export function applyPoisonDamage(pokemon: InPlayPokemon): InPlayPokemon {
-  if (pokemon.statusCondition !== 'Poisoned') return pokemon;
+  if (!pokemon.statusConditions.includes('Poisoned')) return pokemon;
   return { ...pokemon, damageTaken: pokemon.damageTaken + 10 };
 }
 
 export function applyBurnDamage(pokemon: InPlayPokemon): InPlayPokemon {
-  if (pokemon.statusCondition !== 'Burned') return pokemon;
+  if (!pokemon.statusConditions.includes('Burned')) return pokemon;
   // Flip coin: heads = remove burn, tails = 20 damage
   const heads = Math.random() < 0.5;
-  if (heads) return { ...pokemon, statusCondition: null };
+  if (heads) return { ...pokemon, statusConditions: pokemon.statusConditions.filter(s => s !== 'Burned') };
   return { ...pokemon, damageTaken: pokemon.damageTaken + 20 };
 }
 

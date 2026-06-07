@@ -67,6 +67,7 @@ export interface AttackEffects {
   returnDefender: boolean;           // return defending pokemon + cards to opponent's hand
   defenderStatus: StatusCondition | null | false;
   // false = skip status (handled elsewhere), null = no status, StatusCondition = apply
+  defenderStatuses: StatusCondition[]; // multi-status (non-empty overrides defenderStatus path)
   selfStatus: StatusCondition | null; // apply to ATTACKER
   drawCards: number;
   coinMsg: string;
@@ -98,6 +99,7 @@ export function computeAttackEffects(
     forceOpponentSwitch: false,
     returnDefender: false,
     defenderStatus: false,
+    defenderStatuses: [],
     selfStatus: null,
     drawCards: 0,
     coinMsg: '',
@@ -108,6 +110,15 @@ export function computeAttackEffects(
   };
 
   const cardId = attackerPokemon.card.id;
+
+  // ── Venom Powder (Venomoth base1-29) — coin flip; heads = Poisoned + Confused ─
+  if ((cardId === 'base1-29' || attackerPokemon.card.name === 'Venomoth') && atk.name === 'Venom Powder') {
+    const heads = flip();
+    res.coinMsg = heads ? '(heads! — Poisoned + Confused!)' : '(tails — no effect)';
+    if (heads) res.defenderStatuses = ['Poisoned', 'Confused'];
+    res.defenderStatus = null; // skip the generic single-status path
+    return res;
+  }
 
   // ── Selfdestruct / Explosion ─────────────────────────────────────────────
   if (atk.name === 'Selfdestruct' || atk.name === 'Explosion') {
@@ -384,7 +395,7 @@ export function handleTrainerEffect(
   if (name === 'full heal' || id === 'base1-82') {
     const p = player();
     if (p.active) {
-      const healed = { ...p.active, statusCondition: null };
+      const healed = { ...p.active, statusConditions: [] };
       after = logMsg({ ...after, [playerId]: { ...p, active: healed } },
         `${playerName} clears ${p.active.card.name}'s status conditions.`);
     }
@@ -592,7 +603,10 @@ export function handleTrainerEffect(
     const o = opp();
     const heads = flip();
     if (heads && o.active) {
-      const sleptActive = { ...o.active, statusCondition: 'Asleep' as StatusCondition };
+      const scs = o.active.statusConditions.includes('Asleep')
+        ? o.active.statusConditions
+        : [...o.active.statusConditions, 'Asleep' as StatusCondition];
+      const sleptActive = { ...o.active, statusConditions: scs };
       return logMsg({ ...after, [oppId]: { ...o, active: sleptActive } },
         `${playerName} plays Sleep! — Heads! ${o.active.card.name} is now Asleep!`);
     }
@@ -674,6 +688,18 @@ export function handleTrainerEffect(
       return logMsg(after, `${playerName} plays Bill's Teleporter — Heads! Draws 4 cards.`);
     }
     return logMsg(after, `${playerName} plays Bill's Teleporter — Tails! No effect.`);
+  }
+
+  // ── Defender ──────────────────────────────────────────────────────────────
+  if (name === 'defender' || id === 'base1-80') {
+    const p = player();
+    if (p.active) {
+      after = logMsg(
+        { ...after, defenderShield: { protectedUid: p.active.uid, playedOnTurn: state.turn } },
+        `${playerName} plays Defender! Damage to ${p.active.card.name} is reduced by 20 during the opponent's next turn.`,
+      );
+    }
+    return after;
   }
 
   // ── Double Colorless Energy (shouldn't reach here — handled in attachEnergy) ──

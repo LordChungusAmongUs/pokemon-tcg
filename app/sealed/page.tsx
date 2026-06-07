@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useGameStore } from '@/store/gameStore';
 import { ALL_CARDS, BASIC_ENERGY_CARDS, isBasicPokemon, isSetUnlocked } from '@/lib/cardUtils';
-import { generatePackCards, SET_PROGRESSION } from '@/lib/progression';
+import { generatePackCards, SET_PROGRESSION, EVENT_PROMO_IDS } from '@/lib/progression';
 import { getAvailableAIDecks } from '@/lib/starterDecks';
 import CardImage from '@/components/cards/CardImage';
 import type { CardData, EnergyType } from '@/engine/GameState';
@@ -25,6 +25,8 @@ function cardFromId(id: string): CardData | undefined {
 export default function SealedPage() {
   const router = useRouter();
   const { user, unopenedPacks, consumeOnePack, addToCollection, collection } = useAuthStore();
+  const [activeSetName, setActiveSetName] = useState<string | null>(null);
+  const [participationPromoId, setParticipationPromoId] = useState<string | null>(null);
   const { startGame } = useGameStore();
 
   const [phase, setPhase] = useState<SealedPhase>('setup');
@@ -55,6 +57,18 @@ export default function SealedPage() {
     }
     addToCollection(allIds); // keep all opened cards
     setPool(allIds);
+    setActiveSetName(setName);
+
+    // Award 1 Black Star Promo for participating in Sealed (#1-20, #22-28)
+    const promoPool = ALL_CARDS.filter(
+      c => c.set === 'Wizards Black Star Promos' && EVENT_PROMO_IDS.includes(c.id)
+    );
+    if (promoPool.length > 0) {
+      const pick = promoPool[Math.floor(Math.random() * promoPool.length)];
+      addToCollection([pick.id]);
+      setParticipationPromoId(pick.id);
+    }
+
     setPhase('opening');
   }
 
@@ -94,7 +108,7 @@ export default function SealedPage() {
     const aiDef = availableAI[Math.floor(Math.random() * availableAI.length)];
     const aiDeck = aiDef.cardIds.map(id => BROWSE_CARDS.find(c => c.id === id)).filter(Boolean) as CardData[];
 
-    startGame('You', deckCards, 'CPU', aiDeck, 'vs-ai');
+    startGame('You', deckCards, 'CPU', aiDeck, 'vs-ai', activeSetName ? { type: 'sealed', setName: activeSetName } : undefined);
     router.push('/game');
   }
 
@@ -170,11 +184,27 @@ export default function SealedPage() {
   // ── Pack opening result ────────────────────────────────────────────────────
   if (phase === 'opening') {
     const openedCards = pool.map(id => cardFromId(id)).filter(Boolean) as CardData[];
+    const promoCard = participationPromoId ? ALL_CARDS.find(c => c.id === participationPromoId) : null;
     return (
       <div className="min-h-screen bg-gray-950 text-white p-4">
         <div className="max-w-2xl mx-auto space-y-4 pt-4">
           <h1 className="text-xl font-black text-yellow-400">Your {REQUIRED_PACKS} Packs</h1>
           <p className="text-sm text-gray-400">{openedCards.length} cards received — all added to your collection!</p>
+
+          {/* Participation promo reward */}
+          {promoCard && (
+            <div className="bg-yellow-900/30 border border-yellow-600/40 rounded-xl px-4 py-3 flex items-center gap-4">
+              <div className="shrink-0">
+                <CardImage card={promoCard} small />
+              </div>
+              <div>
+                <p className="text-sm text-yellow-300 font-bold">⭐ Participation Reward</p>
+                <p className="text-white font-bold">{promoCard.name}</p>
+                <p className="text-xs text-gray-400">Wizards Black Star Promo added to your collection!</p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 max-h-[55vh] overflow-y-auto p-1">
             {openedCards.map((card, i) => <CardImage key={i} card={card} small />)}
           </div>

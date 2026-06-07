@@ -7,8 +7,8 @@
 
 import type { AIDifficulty } from '@/ai/deckGenerator';
 
-const TIER_KEY   = 'pokemon-tcg-ai-tier';
-const STREAK_KEY = 'pokemon-tcg-ai-streak';
+export const TIER_KEY   = 'pokemon-tcg-ai-tier';
+export const STREAK_KEY = 'pokemon-tcg-ai-streak';
 
 export interface StreakData {
   type: 'win' | 'loss' | null;
@@ -82,6 +82,15 @@ export function recordAIGameResult(won: boolean): GameResultOutcome {
   saveStreak(newStreak);
 
   return { tier: newTier, promoted, demoted, streak: newStreak };
+}
+
+/** Wipe tier + streak — called when creating a new profile or resetting an account. */
+export function resetAITier(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(TIER_KEY);
+    localStorage.removeItem(STREAK_KEY);
+  } catch { /* ignore */ }
 }
 
 /** Returns human-readable progress string, e.g. "🏆🏆⬜" */

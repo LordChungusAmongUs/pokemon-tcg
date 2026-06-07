@@ -7,7 +7,7 @@ import {
   attachEnergy, retreat, attack,
   endTurn, playTrainer, evolve, resolvePendingTrainer, resolvePokedex, resolvePokeball,
   useVileplumHeal, useEnergyBurn, useRainDance, useEnergyTrans,
-  useDamageSwap, useGengarCurse, useBuzzap,
+  useDamageSwap, useGengarCurse, useBuzzap, useShift,
   resolvePokemonTrader, resolveMaintenance, resolveItemFinder, resolveNightlyGarbageRun,
   resolvePokemonBreeder, resolveRecycle, confirmRetreat, resolveComputerSearch,
   resolveAttackDiscard, cancelAttackDiscard,
@@ -26,13 +26,22 @@ function awardXP(amount: number, activePlayer: 'player1' | 'player2') {
   });
 }
 
+export interface EventMetadata {
+  /** Which format triggered the game */
+  type: 'prerelease' | 'draft' | 'sealed';
+  /** The TCG set the event was held for */
+  setName: string;
+}
+
 interface GameStore {
   game: GameState | null;
   selectedHandUid: string | null;
+  eventMetadata: EventMetadata | null;
   startGame: (
     p1Name: string, p1Deck: CardData[],
     p2Name: string, p2Deck: CardData[],
     mode: 'vs-ai' | 'local-2p',
+    eventMetadata?: EventMetadata,
   ) => void;
   resetGame: () => void;
   selectHandCard: (uid: string | null) => void;
@@ -56,6 +65,7 @@ interface GameStore {
   damageSwapAction: (fromUid: string, toUid: string) => void;
   gengarCurseAction: (fromOppUid: string, toOppUid: string) => void;
   buzzapAction: (benchSlot: number, targetUid: string, energyType: EnergyType) => void;
+  shiftAction: (shiftType: EnergyType) => void;
   resolvePokedexAction: (orderedUids: string[]) => void;
   resolvePokeballAction: (chosenUid: string) => void;
   resolvePokemonTraderAction: (uid: string) => void;
@@ -76,13 +86,15 @@ interface GameStore {
 export const useGameStore = create<GameStore>((set, get) => ({
   game: null,
   selectedHandUid: null,
+  eventMetadata: null,
 
-  startGame: (p1Name, p1Deck, p2Name, p2Deck, mode) => {
-    const game = initGame(p1Name, p1Deck, p2Name, p2Deck, mode);
-    set({ game, selectedHandUid: null });
+  startGame: (p1Name, p1Deck, p2Name, p2Deck, mode, eventMetadata) => {
+    const prizeCount = eventMetadata ? 4 : 6;
+    const game = initGame(p1Name, p1Deck, p2Name, p2Deck, mode, prizeCount);
+    set({ game, selectedHandUid: null, eventMetadata: eventMetadata ?? null });
   },
 
-  resetGame: () => set({ game: null, selectedHandUid: null }),
+  resetGame: () => set({ game: null, selectedHandUid: null, eventMetadata: null }),
 
   selectHandCard: (uid) => set({ selectedHandUid: uid }),
 
@@ -179,6 +191,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   })),
   buzzapAction: (benchSlot, targetUid, energyType) => set(s => ({
     game: s.game ? useBuzzap(s.game, benchSlot, targetUid, energyType) : null,
+  })),
+  shiftAction: (shiftType) => set(s => ({
+    game: s.game ? useShift(s.game, shiftType) : null,
   })),
   resolvePokedexAction: (orderedUids) => set(s => ({
     game: s.game ? resolvePokedex(s.game, orderedUids) : null,

@@ -69,7 +69,8 @@ export interface InPlayPokemon {
   currentHP: number;
   damageTaken: number;
   attachedEnergy: EnergyInstance[];
-  statusCondition: StatusCondition | null;
+  statusConditions: StatusCondition[];  // stackable; at most one of each kind
+  shiftedType?: EnergyType;             // Venomoth Shift — overrides card.types for damage until end of turn
   turnPlayed: number;    // turn number it was placed; can't evolve same turn
   isFirstTurn: boolean;  // true if it was active at start of game (can't retreat t1)
   evolvedFrom: CardData[]; // previous cards in evolution chain (oldest first)
@@ -136,6 +137,7 @@ export interface GameState {
   winner: 'player1' | 'player2' | null;
   log: string[];
   pendingCoinFlip: boolean;
+  prizeCount: number;  // 6 for standard games; 4 for event formats (Prerelease/Draft/Sealed)
   pendingTrainer?: PendingTrainer;
   pendingRetreat?: { benchSlot: number; cost: number };
   pendingAttackDiscard?: { attackIndex: number; requiredType: EnergyType; count: number };
@@ -145,6 +147,7 @@ export interface GameState {
   cantAttackTarget?: { attackerUid: string; targetUid: string }; // Leer-type: attacker can't attack targetUid
   sandAttackTarget?: string; // Sand Attack: UID of Pokémon with sand in its eyes; must flip coin to attack
   snivel?: { protectedUid: string; attackerUid: string }; // Cubone Snivel: next opponent attack against protectedUid deals -20
+  defenderShield?: { protectedUid: string; playedOnTurn: number }; // Defender trainer: next opponent attack against protectedUid reduced by 20
 }
 
 export interface SelectedDeck {

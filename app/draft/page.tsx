@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useGameStore } from '@/store/gameStore';
 import { ALL_CARDS, BASIC_ENERGY_CARDS, isBasicPokemon } from '@/lib/cardUtils';
-import { generatePackCards, SET_PROGRESSION } from '@/lib/progression';
+import { generatePackCards, SET_PROGRESSION, EVENT_PROMO_IDS } from '@/lib/progression';
 import { generateAIDeck } from '@/ai/deckGenerator';
 import CardImage from '@/components/cards/CardImage';
 import type { CardData, EnergyType } from '@/engine/GameState';
@@ -51,6 +51,7 @@ function aiPick(hand: string[]): string {
 export default function DraftPage() {
   const router = useRouter();
   const { user, profile, unopenedPacks, consumeOnePack, addToCollection, collection } = useAuthStore();
+  const [participationPromoId, setParticipationPromoId] = useState<string | null>(null);
   const { startGame } = useGameStore();
 
   const [phase, setPhase] = useState<DraftPhase>('setup');
@@ -114,6 +115,16 @@ export default function DraftPage() {
         roundPacks.push(nonEnergy);
       }
       allPacks.push(roundPacks);
+    }
+
+    // Award 1 Black Star Promo for participating in the draft (#1-20, #22-28)
+    const promoPool = ALL_CARDS.filter(
+      c => c.set === 'Wizards Black Star Promos' && EVENT_PROMO_IDS.includes(c.id)
+    );
+    if (promoPool.length > 0) {
+      const pick = promoPool[Math.floor(Math.random() * promoPool.length)];
+      addToCollection([pick.id]);
+      setParticipationPromoId(pick.id);
     }
 
     collectionAddedRef.current = false;
@@ -227,7 +238,7 @@ export default function DraftPage() {
     }
     const aiResult = generateAIDeck(2, collection);
     const playerName = profile?.display_name ?? user?.email?.split('@')[0] ?? 'Trainer';
-    startGame(playerName, humanCards, aiResult.name, aiResult.cards, 'vs-ai');
+    startGame(playerName, humanCards, aiResult.name, aiResult.cards, 'vs-ai', { type: 'draft', setName: draft.setName });
     router.push('/game');
   }
 
@@ -389,6 +400,7 @@ export default function DraftPage() {
       const c = ALL_CARDS.find(x => x.id === id);
       return c?.rarity?.toLowerCase().includes('rare');
     }).length;
+    const promoCard = participationPromoId ? ALL_CARDS.find(c => c.id === participationPromoId) : null;
 
     return (
       <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-4">
@@ -405,6 +417,16 @@ export default function DraftPage() {
             </p>
             <p className="text-xs text-gray-500 mt-1">They&apos;ve been added to your collection.</p>
           </div>
+          {promoCard && (
+            <div className="bg-yellow-900/30 border border-yellow-600/40 rounded-xl px-4 py-3 space-y-2">
+              <p className="text-sm text-yellow-300 font-bold">⭐ Participation Reward</p>
+              <p className="text-xs text-gray-300">1 × Wizards Black Star Promo added to your collection!</p>
+              <div className="flex justify-center">
+                <CardImage card={promoCard} />
+              </div>
+              <p className="text-sm font-bold text-white">{promoCard.name}</p>
+            </div>
+          )}
           <button
             onClick={() => setPhase('building')}
             className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-lg"

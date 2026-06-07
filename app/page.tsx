@@ -102,6 +102,7 @@ export default function HomePage() {
   const [mode, setMode] = useState<'vs-ai' | 'local-2p'>('vs-ai');
   const [aiTier, setAiTier] = useState<AIDifficulty>(1);
   const [streak, setStreak] = useState({ type: null as 'win' | 'loss' | null, count: 0 });
+  const [machampNoticeDismissed, setMachampNoticeDismissed] = useState(false);
   const { startGame } = useGameStore();
   const router = useRouter();
 
@@ -168,6 +169,37 @@ export default function HomePage() {
 
       {/* ── Onboarding modals ── */}
       {onboardingStep === 1 && (() => {
+        const machampCard = BROWSE_CARDS.find(c => c.id === 'base1-8');
+
+        // ── Screen A: Bonus Machamp notification ────────────────────────────
+        if (!machampNoticeDismissed) {
+          return (
+            <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+              <div className="bg-gray-900 border-2 border-purple-500 rounded-2xl p-6 max-w-sm w-full text-center space-y-4">
+                <p className="text-xs text-purple-400 uppercase tracking-widest font-bold">Bonus Card!</p>
+                <h2 className="text-2xl font-black text-white">You got Machamp!</h2>
+                <p className="text-sm text-gray-300">
+                  As a new trainer you&apos;re receiving a <span className="text-purple-300 font-bold">Base Set Machamp</span> — one of the rarest cards in the game. It&apos;s already in your collection!
+                </p>
+                {machampCard && (
+                  <div className="flex justify-center py-2">
+                    <div className="w-36">
+                      <CardImage card={machampCard} />
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={() => setMachampNoticeDismissed(true)}
+                  className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-lg"
+                >
+                  Nice! → See My Deck
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        // ── Screen B: Starter deck card reveal ──────────────────────────────
         const deck = STARTER_DECKS.find(d => d.id === 'custom-fists-and-fire');
         const allIds = deck?.cardIds.filter(id => !id.startsWith('basic-')) ?? [];
         const allCards = allIds.map(id => BROWSE_CARDS.find(c => c.id === id)).filter(Boolean) as import('@/engine/GameState').CardData[];
@@ -175,8 +207,8 @@ export default function HomePage() {
           <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
             <div className="bg-gray-900 border-2 border-yellow-500 rounded-2xl p-6 max-w-2xl w-full text-center space-y-4">
               <p className="text-xs text-yellow-400 uppercase tracking-widest font-bold">Welcome, Trainer!</p>
-              <h2 className="text-2xl font-black text-white">Starter Deck</h2>
-              <p className="text-sm text-gray-300">You received the <span className="text-yellow-300 font-bold">Fists &amp; Fire</span> deck — Fighting and Fire-type Pokémon ready to battle! A bonus <span className="text-yellow-300 font-bold">Machamp</span> is also in your collection.</p>
+              <h2 className="text-2xl font-black text-white">Starter Deck — Fists &amp; Fire</h2>
+              <p className="text-sm text-gray-300">Fighting and Fire-type Pokémon ready to battle. These cards have been added to your collection and saved as a deck.</p>
               <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 max-h-[55vh] overflow-y-auto p-1">
                 {allCards.map((c, i) => <CardImage key={i} card={c} small />)}
               </div>

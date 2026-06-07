@@ -204,7 +204,7 @@ export default function PrereleasePage() {
       if (fallback) playerDeck.unshift(fallback);
     }
 
-    startGame('You', playerDeck, 'CPU', aiDeck, 'vs-ai');
+    startGame('You', playerDeck, 'CPU', aiDeck, 'vs-ai', { type: 'prerelease', setName: activeSet });
     router.push('/game');
   }
 

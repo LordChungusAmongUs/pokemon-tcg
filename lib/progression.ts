@@ -116,6 +116,16 @@ export const SET_PROGRESSION: Array<{ name: string; prerequisite: string | null 
   { name: 'Team Magma vs Team Aqua', prerequisite: 'Dragon' },
   { name: 'Hidden Legends',          prerequisite: 'Team Magma vs Team Aqua' },
   { name: 'FireRed & LeafGreen',     prerequisite: 'Hidden Legends' },
+  { name: 'Team Rocket Returns',     prerequisite: 'FireRed & LeafGreen' },
+  { name: 'Deoxys',                  prerequisite: 'Team Rocket Returns' },
+  { name: 'Emerald',                 prerequisite: 'Deoxys' },
+  { name: 'Unseen Forces',           prerequisite: 'Emerald' },
+  { name: 'Delta Species',           prerequisite: 'Unseen Forces' },
+  { name: 'Legend Maker',            prerequisite: 'Delta Species' },
+  { name: 'Holon Phantoms',          prerequisite: 'Legend Maker' },
+  { name: 'Crystal Guardians',       prerequisite: 'Holon Phantoms' },
+  { name: 'Dragon Frontiers',        prerequisite: 'Crystal Guardians' },
+  { name: 'Power Keepers',           prerequisite: 'Dragon Frontiers' },
 ];
 
 export const VOUCHER_THRESHOLD  = 0.60; // hit this → free deck voucher + prerelease invite

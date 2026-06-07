@@ -33,7 +33,17 @@ const SET_CODES = [
   'ex4',        // EX Team Magma vs Team Aqua
   'ex5',        // EX Hidden Legends
   'ex6',        // EX FireRed & LeafGreen
-  'dp1',        // Wizards Promo
+  'ex7',        // EX Team Rocket Returns
+  'ex8',        // EX Deoxys
+  'ex9',        // EX Emerald
+  'ex10',       // EX Unseen Forces
+  'ex11',       // EX Delta Species
+  'ex12',       // EX Legend Maker
+  'ex13',       // EX Holon Phantoms
+  'ex14',       // EX Crystal Guardians
+  'ex15',       // EX Dragon Frontiers
+  'ex16',       // EX Power Keepers
+  'dp1',        // Diamond & Pearl
   'basep',      // Wizards Black Star Promos
 ];
 

@@ -1074,6 +1074,25 @@ export default function GamePage() {
           </div>
         </div>
       )}
+      {/* ── Switch: choose which bench Pokémon to swap in ────────── */}
+      {game.pendingTrainer?.type === 'switch' && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 rounded-2xl p-5 max-w-xs w-full space-y-3">
+            <h3 className="font-bold text-yellow-400 text-center">Switch</h3>
+            <p className="text-sm text-gray-400 text-center">Choose a Pokémon from your bench to switch in:</p>
+            <div className="flex flex-wrap gap-3 justify-center">
+              {p1.bench.map((poke, i) => poke ? (
+                <button key={poke.uid} onClick={() => resolveTrainerAction(i)}
+                  className="flex flex-col items-center gap-1 px-3 py-2 bg-gray-700 hover:bg-green-700 rounded-xl">
+                  <CardImage card={poke.card} small />
+                  <span className="text-xs text-white font-bold">{poke.card.name}</span>
+                  <span className="text-xs text-gray-400">{poke.currentHP - poke.damageTaken} HP</span>
+                </button>
+              ) : null)}
+            </div>
+          </div>
+        </div>
+      )}
       {game.pendingTrainer?.type === 'pokedex' && (() => {
         const { cards, cardUids } = game.pendingTrainer;
         // Initialize order on first render

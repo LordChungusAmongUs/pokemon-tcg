@@ -126,7 +126,8 @@ export type PendingTrainer =
   | { type: 'computer-search-deck'; firstUid: string; secondUid: string }
   | { type: 'bosss-way'; cardUids: string[] }
   | { type: 'energy-retrieval' }
-  | { type: 'energy-retrieval-energy'; discardUid: string; selectedEnergyUids: string[] };
+  | { type: 'energy-retrieval-energy'; discardUid: string; selectedEnergyUids: string[] }
+  | { type: 'switch' };
 
 export interface GameState {
   phase: GamePhase;

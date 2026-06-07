@@ -454,19 +454,8 @@ export function handleTrainerEffect(
     return after;
   }
 
-  // ── Switch ────────────────────────────────────────────────────────────────
-  if (name === 'switch' || id === 'base1-95') {
-    const p = player();
-    const benchIdx = p.bench.findIndex(b => b !== null);
-    if (p.active && benchIdx >= 0) {
-      const swapIn = p.bench[benchIdx]!;
-      const newBench = [...p.bench];
-      newBench[benchIdx] = p.active;
-      after = logMsg({ ...after, [playerId]: { ...p, active: swapIn, bench: newBench } },
-        `${playerName} switches ${p.active.card.name} with ${swapIn.card.name}.`);
-    }
-    return after;
-  }
+  // Switch is intercepted in playTrainer (GameEngine.ts) before reaching here
+  // — it uses a pendingTrainer picker when multiple bench Pokémon are available.
 
   // ── Scoop Up ──────────────────────────────────────────────────────────────
   if (name === 'scoop up' || id === 'base1-78') {

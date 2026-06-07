@@ -1330,6 +1330,25 @@ export function playTrainer(state: GameState, handUid: string): GameState {
     return { ...next, pendingTrainer: { type: 'energy-retrieval' } };
   }
 
+  // ── Switch: player chooses which bench Pokémon to switch in ──────────────
+  if (name === 'switch' || id === 'base1-95') {
+    const p = next[active];
+    if (!p.active) return next;
+    const benchCount = p.bench.filter(b => b !== null).length;
+    if (benchCount === 0) return log(next, `${p.name} has no benched Pokémon to switch with!`);
+    if (benchCount === 1) {
+      // Only one option — execute immediately, no picker needed
+      const benchIdx = p.bench.findIndex(b => b !== null);
+      const swapIn = p.bench[benchIdx]!;
+      const newBench = [...p.bench];
+      newBench[benchIdx] = p.active;
+      return log({ ...next, [active]: { ...p, active: swapIn, bench: newBench } },
+        `${p.name} switches ${p.active.card.name} with ${swapIn.card.name}.`);
+    }
+    // Multiple bench Pokémon — player must choose
+    return { ...next, pendingTrainer: { type: 'switch' } };
+  }
+
   // Delegate to comprehensive handler for all other trainers
   return handleTrainerEffect(next, next, active, card, drawCard, inPlayPokemon);
 }
@@ -1415,6 +1434,17 @@ export function resolvePendingTrainer(state: GameState, choice: number): GameSta
     newBench[slot] = o.active;
     return log({ ...cleared, [opp]: { ...o, active: swapIn, bench: newBench } },
       `${cleared[active].name} uses Gust of Wind! ${swapIn.card.name} is forced in!`);
+  }
+
+  if (pending.type === 'switch') {
+    const p = cleared[active];
+    const slot = choice;
+    if (slot < 0 || slot > 4 || !p.bench[slot] || !p.active) return cleared;
+    const swapIn = p.bench[slot]!;
+    const newBench = [...p.bench];
+    newBench[slot] = p.active;
+    return log({ ...cleared, [active]: { ...p, active: swapIn, bench: newBench } },
+      `${cleared[active].name} switches ${p.active.card.name} with ${swapIn.card.name}.`);
   }
 
   if (pending.type === 'pokedex') {

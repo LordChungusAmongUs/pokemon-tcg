@@ -150,6 +150,7 @@ export interface GameState {
   sandAttackTarget?: string; // Sand Attack: UID of Pokémon with sand in its eyes; must flip coin to attack
   snivel?: { protectedUid: string; attackerUid: string }; // Cubone Snivel: next opponent attack against protectedUid deals -20
   defenderShield?: { protectedUid: string; playedOnTurn: number }; // Defender trainer: next opponent attack against protectedUid reduced by 20
+  pendingMetronome?: { attackerName: string }; // Metronome: waiting for player to choose which defender attack to copy
 }
 
 export interface SelectedDeck {

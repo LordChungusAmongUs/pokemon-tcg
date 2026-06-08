@@ -556,7 +556,14 @@ function getTypedDiscardRequirement(atk: CardAttack): { type: EnergyType; count:
 // skipCostCheck=true:    cost was already validated before the discard; don't re-check
 //   (needed because resolveAttackDiscard removes the typed energy BEFORE calling attack,
 //    which would otherwise make canPayCost fail even though cost was legitimately paid)
-export function attack(state: GameState, attackIndex: number, skipTypedDiscard = false, skipCostCheck = false): GameState {
+export function attack(
+  state: GameState,
+  attackIndex: number,
+  skipTypedDiscard = false,
+  skipCostCheck = false,
+  overrideAttack?: import('./GameState').CardAttack,
+  suppressEnergyDiscard = false,
+): GameState {
   const active = state.activePlayer;
   const opponent = active === 'player1' ? 'player2' : 'player1';
   const attacker = state[active];
@@ -565,8 +572,13 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
   if (!attacker.active || !defender.active) return state;
   if (attacker.hasAttackedThisTurn) return state;
 
-  const atk = attacker.active.card.attacks[attackIndex];
+  const atk = overrideAttack ?? attacker.active.card.attacks[attackIndex];
   if (!atk) return state;
+
+  // ── Metronome — prompt player to choose one of defender's attacks ─────────
+  if (atk.name === 'Metronome' && !overrideAttack) {
+    return { ...state, pendingMetronome: { attackerName: attacker.active.card.name } };
+  }
   // Energy Burn: all attached energy counts as Fire for cost-checking purposes
   const effectiveEnergy = attacker.active.energyBurned
     ? attacker.active.attachedEnergy.map(e => ({ ...e, type: 'Fire' as EnergyType }))
@@ -862,8 +874,9 @@ export function attack(state: GameState, attackIndex: number, skipTypedDiscard =
   // ── Discard attacker's energy ────────────────────────────────────────────
   // When skipTypedDiscard=true, the typed energy was already removed by resolveAttackDiscard —
   // skip the generic discard (fx.discardAttackerEnergy) to avoid double-discarding.
-  const effectiveDiscardCount = skipTypedDiscard ? 0 : fx.discardAttackerEnergy;
-  if (fx.discardAllAttackerEnergy || effectiveDiscardCount > 0) {
+  // When suppressEnergyDiscard=true (Metronome), all energy discards are waived.
+  const effectiveDiscardCount = (skipTypedDiscard || suppressEnergyDiscard) ? 0 : fx.discardAttackerEnergy;
+  if (!suppressEnergyDiscard && (fx.discardAllAttackerEnergy || effectiveDiscardCount > 0)) {
     const p = next[active];
     if (p.active) {
       const count = fx.discardAllAttackerEnergy
@@ -1059,6 +1072,13 @@ export function endTurn(state: GameState): GameState {
       betweenTurnLogs.push(`💤 ${pokeName} is still Asleep...`);
     }
   }
+  // Paralysis wears off at the end of the paralyzed Pokémon's own turn
+  // (handles the case where the player passes / AI skips attacking)
+  if (updatedActive?.statusConditions.includes('Paralyzed')) {
+    const pokeName = updatedActive.card.name;
+    updatedActive = { ...updatedActive, statusConditions: updatedActive.statusConditions.filter(s => s !== 'Paralyzed') };
+    betweenTurnLogs.push(`⚡ ${pokeName}'s Paralysis fades.`);
+  }
   // Reset Energy Burn on active pokemon
   if (updatedActive?.energyBurned) updatedActive = { ...updatedActive, energyBurned: false };
   // Reset Shift type at end of active player's turn
@@ -1130,6 +1150,19 @@ export function endTurn(state: GameState): GameState {
 // ─── Attack energy discard resolution ────────────────────────────────────────
 // Called after the player picks which typed energy to discard for Ember etc.
 // Removes those energies, then executes the attack (with skipTypedDiscard=true).
+
+// Resolve a pending Metronome — execute the chosen defender attack (no energy cost / discard).
+export function resolveMetronome(state: GameState, chosenAttackIdx: number): GameState {
+  const active = state.activePlayer;
+  const opponent = active === 'player1' ? 'player2' : 'player1';
+  const defender = state[opponent];
+  if (!defender.active) return state;
+  const chosenAttack = defender.active.card.attacks[chosenAttackIdx];
+  if (!chosenAttack) return state;
+  const cleared = { ...state, pendingMetronome: undefined };
+  // skipTypedDiscard=true, skipCostCheck=true, overrideAttack=chosenAttack, suppressEnergyDiscard=true
+  return attack(cleared, 0, true, true, chosenAttack, true);
+}
 
 export function resolveAttackDiscard(state: GameState, energyUids: string[]): GameState {
   const pending = state.pendingAttackDiscard;

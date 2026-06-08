@@ -12,6 +12,7 @@ import {
   resolvePokemonBreeder, resolveRecycle, confirmRetreat, resolveComputerSearch,
   resolveAttackDiscard, cancelAttackDiscard,
   resolveSendOut, resolveBossWay, resolveEnergyRetrieval,
+  resolveMetronome,
 } from '@/engine/GameEngine';
 import type { EnergyType } from '@/engine/GameState';
 import { XP_REWARDS } from '@/lib/progression';
@@ -81,6 +82,7 @@ interface GameStore {
   cancelAttackDiscardAction: () => void;
   resolveSendOutAction: (benchSlot: number) => void;
   resolveEnergyRetrievalAction: (uid: string | null) => void;
+  resolveMetronomeAction: (attackIndex: number) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -245,6 +247,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   resolveEnergyRetrievalAction: (uid) => set(s => ({
     game: s.game ? resolveEnergyRetrieval(s.game, uid) : null,
   })),
+
+  resolveMetronomeAction: (attackIndex) => set(s => {
+    if (!s.game) return {};
+    const afterMetronome = resolveMetronome(s.game, attackIndex);
+    if (afterMetronome.pendingSendOut) return { game: afterMetronome, selectedHandUid: null };
+    const final = afterMetronome.phase !== 'gameover' ? endTurn(afterMetronome) : afterMetronome;
+    return { game: final, selectedHandUid: null };
+  }),
 
   resolveSendOutAction: (benchSlot) => set(s => {
     if (!s.game) return {};

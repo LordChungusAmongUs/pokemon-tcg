@@ -116,7 +116,7 @@ export default function GamePage() {
     resolvePokemonBreederAction, resolveRecycleAction, confirmRetreatAction,
     resolveAttackDiscardAction, cancelAttackDiscardAction,
     resolveSendOutAction, resolveBossWayAction, resolveEnergyRetrievalAction,
-    shiftAction,
+    shiftAction, resolveMetronomeAction,
   } = useGameStore();
 
   const [detailCard, setDetailCard] = useState<CardData | null>(null);
@@ -1723,6 +1723,35 @@ export default function GamePage() {
                   Confirm ({selectedValue}/{count})
                 </button>
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Metronome — choose one of the defender's attacks to copy ── */}
+      {game.pendingMetronome && p2.active && (() => {
+        const defPoke = p2.active;
+        return (
+          <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-900 border-2 border-pink-600 rounded-2xl p-5 max-w-sm w-full space-y-3">
+              <h3 className="font-bold text-pink-400 text-center text-lg">🎵 Metronome!</h3>
+              <p className="text-sm text-gray-300 text-center">
+                Choose one of <span className="text-white font-bold">{defPoke.card.name}</span>&apos;s attacks to copy:
+              </p>
+              <div className="space-y-2">
+                {defPoke.card.attacks.map((atk, i) => (
+                  <button key={i}
+                    onClick={() => { resolveMetronomeAction(i); closePreview(); }}
+                    className="w-full py-2.5 rounded-xl font-medium flex justify-between items-center px-4 bg-pink-700 hover:bg-pink-600 text-white transition-colors">
+                    <span>⚔️ {atk.name}</span>
+                    <span className="font-bold">{atk.damageStr || (atk.damage ? `${atk.damage}` : '—')}</span>
+                  </button>
+                ))}
+                {defPoke.card.attacks.length === 0 && (
+                  <p className="text-gray-500 text-sm text-center">Defender has no attacks!</p>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 text-center">Energy costs &amp; discards are waived</p>
             </div>
           </div>
         );
